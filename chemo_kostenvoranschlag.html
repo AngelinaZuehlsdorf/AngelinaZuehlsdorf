@@ -235,17 +235,18 @@ function bestTablets(target, sizes) {
 //   • entweder EINE Größe (auch halbe Tabletten: ½, 1, 1½, 2)
 //     oder ZWEI Größen mit je 1 ganzen Tablette (z. B. 16 mg + 24 mg)
 //   • bei gleicher Dosis: weniger Tabletten, dann günstiger
-// Kosten: 1 Tablette/Tag = 1 Packung (4 Tage), ½ Tablette/Tag = ½ Packung.
+// Kosten: immer ganze Packungen (à 4 Tbl.) für 4 Tage, z. B. 1½ Tbl./Tag = 6 Tbl. = 2 Packungen.
 function cereniaPO(kg) {
   const target = CERENIA_PO_MG_PER_KG * kg;
   const P = CERENIA_PO_PACKS;
   const frac = n => ({0.5: '½', 1: '1', 1.5: '1½', 2: '2'})[n];
   const options = [];
   for (const p of P) for (const n of [0.5, 1, 1.5, 2])
-    options.push({mg: p.mg * n, price: p.price * n, tabs: n, desc: `${frac(n)} Tbl. ${p.mg} mg`});
+    options.push({mg: p.mg * n, tabs: n, packs: [[p, Math.ceil(n)]], desc: `${frac(n)} Tbl. ${p.mg} mg`});
   for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++)
-    options.push({mg: P[i].mg + P[j].mg, price: P[i].price + P[j].price, tabs: 2,
+    options.push({mg: P[i].mg + P[j].mg, tabs: 2, packs: [[P[i], 1], [P[j], 1]],
                   desc: `je 1 Tbl. ${P[i].mg} mg + ${P[j].mg} mg`});
+  for (const o of options) o.price = o.packs.reduce((a, [p, k]) => a + p.price * k, 0);
   const ok = options.filter(o => o.mg >= target - 1e-9);
   const best = ok.length
     ? ok.reduce((b, o) => (o.mg < b.mg - 1e-9 || (Math.abs(o.mg - b.mg) < 1e-9 &&
@@ -253,7 +254,8 @@ function cereniaPO(kg) {
     : options.reduce((b, o) => o.mg > b.mg ? o : b);   // > 160 kg: größte mögliche Dosis
   return {
     name: 'Cerenia PO (Heimgabe 4 Tage)', route: 'PO', price: cents(best.price),
-    desc: `${best.desc} = ${num(best.mg, 1)} mg/Tag (${num(best.mg / kg, 2)} mg/kg)`,
+    desc: `${best.desc} = ${num(best.mg, 1)} mg/Tag (${num(best.mg / kg, 2)} mg/kg) · ` +
+          best.packs.map(([p, k]) => `${k} Pckg. ${p.mg} mg`).join(' + '),
   };
 }
 
