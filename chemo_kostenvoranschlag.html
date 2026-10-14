@@ -124,7 +124,7 @@ const CERENIA_PO_MG_PER_KG = 2;
 const CERENIA_IV = {mgPerKg: 1, mgPerMl: 10, pricePerMl: 11.03};
 
 const VINCRISTIN_VIAL_PRICE = 66.00;                 // Cellcristin 2 ml / 2 mg
-const DOXO = {mgPerMl: 2, pricePerMl: 19.43};        // Doxorubicin HCL Teva 2 mg/ml
+const DOXO = {mgPerMl: 2, pricePerMl: 17.09, surcharge: 2.38};   // Doxorubicin HCL Teva 2 mg/ml, Zuschlag je Gabe
 
 const CYCLO_TABS = [
   {mg: 50, price: 12.75}, {mg: 25, price: 13.93},
@@ -295,8 +295,8 @@ function doxorubicin(kg, kof, species) {
   }
   const ml = d.mg / DOXO.mgPerMl;
   return {
-    name: 'Doxorubicin HCL Teva 2 mg/ml', route: 'IV', price: cents(ml * DOXO.pricePerMl),
-    desc: `${num(ml, 2)} ml · ${num(d.mg, 2)} mg · ${d.basis}`,
+    name: 'Doxorubicin HCL Teva 2 mg/ml', route: 'IV', price: cents(ml * DOXO.pricePerMl + DOXO.surcharge),
+    desc: `${num(ml, 2)} ml × ${eur.format(DOXO.pricePerMl)} + ${eur.format(DOXO.surcharge)} Zuschlag · ${num(d.mg, 2)} mg · ${d.basis}`,
   };
 }
 
