@@ -303,18 +303,18 @@ function doxorubicin(kg, kof, species) {
 
 // Cyclophosphamid & Lomustin: lieber ab- als aufrunden.
 //   1. bis 5 % unter dem Ziel: möglichst wenige Tabletten, dann die höhere Dosis
-//   2. passt dort nichts: bis 5 % über dem Ziel, möglichst wenige Tabletten, dann die niedrigere Dosis
+//   2. nur Lomustin (allowUp): passt dort nichts, bis 5 % über dem Ziel,
+//      möglichst wenige Tabletten, dann die niedrigere Dosis
 //   3. passt auch dort nichts (sehr kleine Tiere): Hinweis, dass der Tierarzt individuell
 //      entscheidet; Preis vorläufig für die nächstliegende Dosis
 //   Bei gleicher Tablettenzahl und Dosis gewinnt die günstigere Kombination.
 const MAX_DEVIATION = 0.05;
-const INDIVIDUAL_NOTE = 'Keine Kombination innerhalb ±5 % möglich – Dosierung individuell durch Tierarzt festlegen';
-function roundDownTablets(target, sizes, maxDev) {
+function roundDownTablets(target, sizes, maxDev, allowUp = false) {
   const STEP = 2;                                  // 1 Einheit = 0,5 mg (wegen 12,5 mg)
   const units = sizes.map(s => Math.round(s.mg * STEP));
   const lo = Math.ceil(target * (1 - maxDev) * STEP - 1e-9);
   const t = Math.floor(target * STEP + 1e-9);
-  const hi = Math.floor(target * (1 + maxDev) * STEP + 1e-9);
+  const hi = allowUp ? Math.floor(target * (1 + maxDev) * STEP + 1e-9) : t;
   const best = [{tabs: 0, price: 0, from: -1}];    // je Menge: wenigste Tabletten, dann günstigster Preis
   for (let a = 1; a <= hi; a++) {
     best[a] = null;
@@ -331,7 +331,8 @@ function roundDownTablets(target, sizes, maxDev) {
   if (pick < 0)
     for (let a = t + 1; a <= hi; a++)              // 2. aufrunden, von unten
       if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;
-  if (pick < 0) return {...bestTablets(target, sizes), individual: true};
+  if (pick < 0) return {...bestTablets(target, sizes),
+    note: `Keine Kombination ${allowUp ? 'innerhalb ±5 %' : 'bis 5 % unter Ziel'} möglich – Dosierung individuell durch Tierarzt festlegen`};
   const counts = sizes.map(() => 0);
   for (let a = pick; a > 0; a -= units[best[a].from]) counts[best[a].from]++;
   const parts = sizes.map((s, i) => counts[i] ? `${counts[i]}× ${num(s.mg, s.mg % 1 ? 1 : 0)} mg` : '').filter(Boolean);
@@ -344,17 +345,17 @@ function cyclophosphamid(kg, kof, species) {
   return {
     name: 'Cyclophosphamid Tabletten', route: 'PO', price: cents(t.price),
     desc: `${t.desc} = ${num(t.mg, 1)} mg · Ziel ${num(d.mg, 1)} mg (${d.basis})`,
-    note: t.individual ? INDIVIDUAL_NOTE : '',
+    note: t.note || '',
   };
 }
 
 function lomustin(kof, mgPerM2) {
   const target = kof * mgPerM2;
-  const t = roundDownTablets(target, LOMUSTIN_CAPS, MAX_DEVIATION);
+  const t = roundDownTablets(target, LOMUSTIN_CAPS, MAX_DEVIATION, true);
   return {
     name: 'Lomustin Kapseln', route: 'PO', price: cents(t.price),
     desc: `${t.desc} = ${num(t.mg, 1)} mg · Ziel ${num(target, 1)} mg (${mgPerM2} mg/m² × ${num(kof, 3)} m²)`,
-    note: t.individual ? INDIVIDUAL_NOTE : '',
+    note: t.note || '',
   };
 }
 
