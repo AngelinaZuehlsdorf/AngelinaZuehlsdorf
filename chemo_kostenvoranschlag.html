@@ -66,6 +66,7 @@ input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:
 .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
 .row:last-child{border-bottom:none}
 .row .desc{font-size:11px;color:var(--muted);margin-top:2px}
+.note{display:block;width:fit-content;max-width:100%;font-size:11px;font-weight:600;background:var(--warn-bg);color:var(--warn-fg);border-radius:4px;padding:2px 6px;margin-top:4px}
 .row .price{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
 .subtotal{display:flex;justify-content:space-between;padding-top:8px;margin-top:2px;border-top:1px solid var(--border-strong);font-size:13px;font-weight:600}
 .subtotal span:first-child{color:var(--muted);font-size:12px}
@@ -300,17 +301,22 @@ function doxorubicin(kg, kof, species) {
   };
 }
 
-// Cyclophosphamid: lieber ab- als aufrunden.
-//   • nie über der Zieldosis, höchstens 5 % darunter
-//   • darin möglichst wenige Tabletten, dann am nächsten am Ziel, dann günstiger
-//   • passt keine Kombination in dieses Fenster (sehr kleine Tiere): nächstliegende Dosis
-const CYCLO_MAX_UNDER = 0.05;
-function roundDownTablets(target, sizes, maxUnder) {
+// Cyclophosphamid & Lomustin: lieber ab- als aufrunden.
+//   1. bis 5 % unter dem Ziel: möglichst wenige Tabletten, dann die höhere Dosis
+//   2. passt dort nichts: bis 5 % über dem Ziel, möglichst wenige Tabletten, dann die niedrigere Dosis
+//   3. passt auch dort nichts (sehr kleine Tiere): Hinweis, dass der Tierarzt individuell
+//      entscheidet; Preis vorläufig für die nächstliegende Dosis
+//   Bei gleicher Tablettenzahl und Dosis gewinnt die günstigere Kombination.
+const MAX_DEVIATION = 0.05;
+const INDIVIDUAL_NOTE = 'Keine Kombination innerhalb ±5 % möglich – Dosierung individuell durch Tierarzt festlegen';
+function roundDownTablets(target, sizes, maxDev) {
   const STEP = 2;                                  // 1 Einheit = 0,5 mg (wegen 12,5 mg)
   const units = sizes.map(s => Math.round(s.mg * STEP));
-  const limit = Math.floor(target * STEP + 1e-9);
+  const lo = Math.ceil(target * (1 - maxDev) * STEP - 1e-9);
+  const t = Math.floor(target * STEP + 1e-9);
+  const hi = Math.floor(target * (1 + maxDev) * STEP + 1e-9);
   const best = [{tabs: 0, price: 0, from: -1}];    // je Menge: wenigste Tabletten, dann günstigster Preis
-  for (let a = 1; a <= limit; a++) {
+  for (let a = 1; a <= hi; a++) {
     best[a] = null;
     sizes.forEach((s, i) => {
       const p = best[a - units[i]];
@@ -320,10 +326,12 @@ function roundDownTablets(target, sizes, maxUnder) {
     });
   }
   let pick = -1;
-  for (let a = limit; a >= Math.ceil(target * (1 - maxUnder) * STEP - 1e-9) && a > 0; a--) {
-    if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;   // von oben: bei gleicher Anzahl gewinnt die höhere Dosis
-  }
-  if (pick < 0) return bestTablets(target, sizes);
+  for (let a = t; a >= Math.max(lo, 1); a--)       // 1. abrunden, von oben
+    if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;
+  if (pick < 0)
+    for (let a = t + 1; a <= hi; a++)              // 2. aufrunden, von unten
+      if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;
+  if (pick < 0) return {...bestTablets(target, sizes), individual: true};
   const counts = sizes.map(() => 0);
   for (let a = pick; a > 0; a -= units[best[a].from]) counts[best[a].from]++;
   const parts = sizes.map((s, i) => counts[i] ? `${counts[i]}× ${num(s.mg, s.mg % 1 ? 1 : 0)} mg` : '').filter(Boolean);
@@ -332,19 +340,21 @@ function roundDownTablets(target, sizes, maxUnder) {
 
 function cyclophosphamid(kg, kof, species) {
   const d = doseBasis(kg, kof, species, 250, 10);
-  const t = roundDownTablets(d.mg, CYCLO_TABS, CYCLO_MAX_UNDER);
+  const t = roundDownTablets(d.mg, CYCLO_TABS, MAX_DEVIATION);
   return {
     name: 'Cyclophosphamid Tabletten', route: 'PO', price: cents(t.price),
     desc: `${t.desc} = ${num(t.mg, 1)} mg · Ziel ${num(d.mg, 1)} mg (${d.basis})`,
+    note: t.individual ? INDIVIDUAL_NOTE : '',
   };
 }
 
 function lomustin(kof, mgPerM2) {
   const target = kof * mgPerM2;
-  const t = bestTablets(target, LOMUSTIN_CAPS);
+  const t = roundDownTablets(target, LOMUSTIN_CAPS, MAX_DEVIATION);
   return {
     name: 'Lomustin Kapseln', route: 'PO', price: cents(t.price),
     desc: `${t.desc} = ${num(t.mg, 1)} mg · Ziel ${num(target, 1)} mg (${mgPerM2} mg/m² × ${num(kof, 3)} m²)`,
+    note: t.individual ? INDIVIDUAL_NOTE : '',
   };
 }
 
@@ -378,6 +388,7 @@ function buildEstimates(kg, species) {
     e.stdSum = sum(e.stdRows);
     e.medSum = sum(e.meds);
     e.total = cents(e.stdSum + e.medSum);
+    e.individual = e.meds.some(m => m.note);
   }
   return {kof, list};
 }
@@ -389,7 +400,7 @@ const $ = id => document.getElementById(id);
 let species = 'hund';
 const openState = new Set();   // aufgeklappte Karten über Neuberechnungen hinweg merken
 
-const rowHtml = r => `<div class="row"><div>${r.name}${r.route ? `<span class="badge badge-${r.route.toLowerCase()}">${r.route}</span>` : ''}${r.desc ? `<div class="desc">${r.desc}</div>` : ''}</div><div class="price">${eur.format(r.price)}</div></div>`;
+const rowHtml = r => `<div class="row"><div>${r.name}${r.route ? `<span class="badge badge-${r.route.toLowerCase()}">${r.route}</span>` : ''}${r.desc ? `<div class="desc">${r.desc}</div>` : ''}${r.note ? `<div class="note">${r.note}</div>` : ''}</div><div class="price">${eur.format(r.price)}</div></div>`;
 const block = (title, rows, total) => `<p class="section-header">${title}</p>${rows.map(rowHtml).join('')}<div class="subtotal"><span>Zwischensumme</span><span>${eur.format(total)}</span></div>`;
 
 function render() {
@@ -417,7 +428,7 @@ function render() {
       const key = e.title + e.tag;
       return `<details class="card chemo" data-key="${key}"${openState.has(key) ? ' open' : ''}>
         <summary><i class="ti ti-chevron-right chev" aria-hidden="true"></i>
-          <span class="chemo-name"><b>${e.title}</b><small>${e.tag}</small></span>
+          <span class="chemo-name"><b>${e.title}</b><small>${e.tag}</small>${e.individual ? '<span class="note">Dosierung individuell durch Tierarzt – Preis vorläufig</span>' : ''}</span>
           <span class="chemo-total">${eur.format(e.total)}</span></summary>
         <div class="chemo-body">
           ${block('Medikamente', e.meds, e.medSum)}
