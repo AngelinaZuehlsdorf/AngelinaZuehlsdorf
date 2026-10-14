@@ -139,6 +139,7 @@ const LOMUSTIN_CAPS = [
 const KOF_THRESHOLD_KG = 15;
 
 // ── Standardleistungen (gemeinsame Basis + Zusätze je Protokoll) ────────────
+// Format: [Bezeichnung, Einzelpreis, Anzahl (optional, Standard 1)]
 const STD_BASE = [
   ['34 Folgeuntersuchung mit Beratung', 32.89],
   ['627 Blutprobenentnahme venös', 17.09],
@@ -154,7 +155,7 @@ const STD_IV = [
   ['Apo Chemo Herstellen', 107.10],
   ['VBM Apo Chemo herstellen', 38.37],
   ['225 Venenkatheter peripher einlegen', 24.36],
-  ['224 Injektion IV (×2)', 28.74],
+  ['224 Injektion IV', 28.74, 2],
   ['226 Venenkatheter entfernen', 10.98],
 ];
 const STD = {
@@ -339,7 +340,11 @@ function buildEstimates(kg, species) {
                meds: [lomustin(kof, 60), poAnti]});
   }
   for (const e of list) {
-    e.stdRows = e.std.map(([name, price]) => ({name, price}));
+    e.stdRows = e.std.map(([name, price, qty = 1]) => ({
+      name: qty > 1 ? `${name} (×${qty})` : name,
+      price: cents(price * qty),
+      desc: qty > 1 ? `${qty} × ${eur.format(price)}` : '',
+    }));
     e.stdSum = sum(e.stdRows);
     e.medSum = sum(e.meds);
     e.total = cents(e.stdSum + e.medSum);
