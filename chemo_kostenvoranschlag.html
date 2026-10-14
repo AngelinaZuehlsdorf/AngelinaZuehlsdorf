@@ -300,9 +300,39 @@ function doxorubicin(kg, kof, species) {
   };
 }
 
+// Cyclophosphamid: lieber ab- als aufrunden.
+//   • nie über der Zieldosis, höchstens 5 % darunter
+//   • darin möglichst wenige Tabletten, dann am nächsten am Ziel, dann günstiger
+//   • passt keine Kombination in dieses Fenster (sehr kleine Tiere): nächstliegende Dosis
+const CYCLO_MAX_UNDER = 0.05;
+function roundDownTablets(target, sizes, maxUnder) {
+  const STEP = 2;                                  // 1 Einheit = 0,5 mg (wegen 12,5 mg)
+  const units = sizes.map(s => Math.round(s.mg * STEP));
+  const limit = Math.floor(target * STEP + 1e-9);
+  const best = [{tabs: 0, price: 0, from: -1}];    // je Menge: wenigste Tabletten, dann günstigster Preis
+  for (let a = 1; a <= limit; a++) {
+    best[a] = null;
+    sizes.forEach((s, i) => {
+      const p = best[a - units[i]];
+      if (!p) return;
+      const c = {tabs: p.tabs + 1, price: p.price + s.price, from: i};
+      if (!best[a] || c.tabs < best[a].tabs || (c.tabs === best[a].tabs && c.price < best[a].price - 1e-9)) best[a] = c;
+    });
+  }
+  let pick = -1;
+  for (let a = limit; a >= Math.ceil(target * (1 - maxUnder) * STEP - 1e-9) && a > 0; a--) {
+    if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;   // von oben: bei gleicher Anzahl gewinnt die höhere Dosis
+  }
+  if (pick < 0) return bestTablets(target, sizes);
+  const counts = sizes.map(() => 0);
+  for (let a = pick; a > 0; a -= units[best[a].from]) counts[best[a].from]++;
+  const parts = sizes.map((s, i) => counts[i] ? `${counts[i]}× ${num(s.mg, s.mg % 1 ? 1 : 0)} mg` : '').filter(Boolean);
+  return {mg: pick / STEP, price: best[pick].price, desc: parts.join(' + ')};
+}
+
 function cyclophosphamid(kg, kof, species) {
   const d = doseBasis(kg, kof, species, 250, 10);
-  const t = bestTablets(d.mg, CYCLO_TABS);
+  const t = roundDownTablets(d.mg, CYCLO_TABS, CYCLO_MAX_UNDER);
   return {
     name: 'Cyclophosphamid Tabletten', route: 'PO', price: cents(t.price),
     desc: `${t.desc} = ${num(t.mg, 1)} mg · Ziel ${num(d.mg, 1)} mg (${d.basis})`,
