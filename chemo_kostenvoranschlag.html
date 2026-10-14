@@ -301,22 +301,19 @@ function doxorubicin(kg, kof, species) {
   };
 }
 
-// Cyclophosphamid & Lomustin: lieber ab- als aufrunden.
-//   1. bis 5 % unter dem Ziel: möglichst wenige Tabletten, dann die höhere Dosis
-//   2. nur Lomustin (allowUp): passt dort nichts, bis 5 % über dem Ziel,
-//      möglichst wenige Tabletten, dann die niedrigere Dosis
-//   3. passt auch dort nichts (sehr kleine Tiere): Hinweis, dass der Tierarzt individuell
-//      entscheidet; Preis vorläufig für die nächstliegende Dosis
-//   Bei gleicher Tablettenzahl und Dosis gewinnt die günstigere Kombination.
+// Cyclophosphamid: lieber ab- als aufrunden.
+//   • bis 5 % unter dem Ziel: möglichst wenige Tabletten, dann die höhere Dosis, dann günstiger
+//   • passt dort nichts (sehr kleine Tiere): Hinweis, dass der Tierarzt individuell
+//     entscheidet; Preis vorläufig für die nächstliegende Dosis
+// Mit maxDev = 0 liefert die Funktion die günstigste Kombination für genau diese Dosis.
 const MAX_DEVIATION = 0.05;
-function roundDownTablets(target, sizes, maxDev, allowUp = false) {
+function roundDownTablets(target, sizes, maxDev) {
   const STEP = 2;                                  // 1 Einheit = 0,5 mg (wegen 12,5 mg)
   const units = sizes.map(s => Math.round(s.mg * STEP));
   const lo = Math.ceil(target * (1 - maxDev) * STEP - 1e-9);
   const t = Math.floor(target * STEP + 1e-9);
-  const hi = allowUp ? Math.floor(target * (1 + maxDev) * STEP + 1e-9) : t;
   const best = [{tabs: 0, price: 0, from: -1}];    // je Menge: wenigste Tabletten, dann günstigster Preis
-  for (let a = 1; a <= hi; a++) {
+  for (let a = 1; a <= t; a++) {
     best[a] = null;
     sizes.forEach((s, i) => {
       const p = best[a - units[i]];
@@ -326,13 +323,10 @@ function roundDownTablets(target, sizes, maxDev, allowUp = false) {
     });
   }
   let pick = -1;
-  for (let a = t; a >= Math.max(lo, 1); a--)       // 1. abrunden, von oben
+  for (let a = t; a >= Math.max(lo, 1); a--)       // von oben: bei gleicher Anzahl gewinnt die höhere Dosis
     if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;
-  if (pick < 0)
-    for (let a = t + 1; a <= hi; a++)              // 2. aufrunden, von unten
-      if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;
   if (pick < 0) return {...bestTablets(target, sizes),
-    note: `Keine Kombination ${allowUp ? 'innerhalb ±5 %' : 'bis 5 % unter Ziel'} möglich – Dosierung individuell durch Tierarzt festlegen`};
+    note: 'Keine Kombination bis 5 % unter Ziel möglich – Dosierung individuell durch Tierarzt festlegen'};
   const counts = sizes.map(() => 0);
   for (let a = pick; a > 0; a -= units[best[a].from]) counts[best[a].from]++;
   const parts = sizes.map((s, i) => counts[i] ? `${counts[i]}× ${num(s.mg, s.mg % 1 ? 1 : 0)} mg` : '').filter(Boolean);
@@ -349,13 +343,31 @@ function cyclophosphamid(kg, kof, species) {
   };
 }
 
-function lomustin(kof, mgPerM2) {
+// Lomustin (Kapseln in 5-mg-Schritten):
+//   Hund: auf den nächsten 5-mg-Schritt abrunden; fehlt bis zum nächsthöheren Schritt
+//         höchstens 1 mg, wird aufgerundet (z. B. 44,7 → 45 mg, aber 68,3 → 65 mg).
+//   Katze: Praxistabelle nach kg (auf ganze kg gerundet); "null" bzw. Gewichte außerhalb
+//         der Tabelle = Rücksprache Tierarzt (Preis vorläufig nach der Hunde-Regel).
+const LOMUSTIN_ROUND_UP_MG = 1;
+const LOMUSTIN_CAT_TABLE = {2: 5, 3: 10, 4: 10, 5: 10, 6: null, 7: 15, 8: 15, 9: null, 10: null, 11: 20, 12: 20};
+const LOMUSTIN_VET_NOTE = 'Rücksprache Tierarzt – Dosierung individuell festlegen, Preis vorläufig';
+
+function lomustin(kg, kof, species, mgPerM2) {
   const target = kof * mgPerM2;
-  const t = roundDownTablets(target, LOMUSTIN_CAPS, MAX_DEVIATION, true);
+  let dose = Math.floor(target / 5) * 5;
+  if (dose + 5 - target <= LOMUSTIN_ROUND_UP_MG + 1e-9) dose += 5;
+  let note = dose < 5 ? LOMUSTIN_VET_NOTE : '', basis = '';
+  if (species === 'katze') {
+    const tab = LOMUSTIN_CAT_TABLE[Math.round(kg)];
+    if (tab) { dose = tab; basis = ` · Praxistabelle ${Math.round(kg)} kg`; }
+    else note = LOMUSTIN_VET_NOTE;
+  }
+  dose = Math.max(dose, 5);
+  const t = roundDownTablets(dose, LOMUSTIN_CAPS, 0);
   return {
     name: 'Lomustin Kapseln', route: 'PO', price: cents(t.price),
-    desc: `${t.desc} = ${num(t.mg, 1)} mg · Ziel ${num(target, 1)} mg (${mgPerM2} mg/m² × ${num(kof, 3)} m²)`,
-    note: t.note || '',
+    desc: `${t.desc} = ${num(t.mg, 0)} mg · Ziel ${num(target, 1)} mg (${mgPerM2} mg/m² × ${num(kof, 3)} m²)${basis}`,
+    note,
   };
 }
 
@@ -373,12 +385,12 @@ function buildEstimates(kg, species) {
   ];
   if (species === 'katze') {
     list.push({title: 'Lomustin', tag: 'PO · 40 mg/m²', std: STD.tabletten,
-               meds: [lomustin(kof, 40), poAnti]});
+               meds: [lomustin(kg, kof, species, 40), poAnti]});
   } else {
     list.push({title: 'Lomustin', tag: 'PO · B-Zell (Mono) · 70 mg/m²', std: STD.tabletten,
-               meds: [lomustin(kof, 70), poAnti]});
+               meds: [lomustin(kg, kof, species, 70), poAnti]});
     list.push({title: 'Lomustin', tag: 'PO · T-Zell · 60 mg/m²', std: STD.tabletten,
-               meds: [lomustin(kof, 60), poAnti]});
+               meds: [lomustin(kg, kof, species, 60), poAnti]});
   }
   for (const e of list) {
     e.stdRows = e.std.map(([name, price, qty = 1]) => ({
