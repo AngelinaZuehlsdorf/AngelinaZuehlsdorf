@@ -348,9 +348,12 @@ function cyclophosphamid(kg, kof, species) {
 //         höchstens 1 mg, wird aufgerundet (z. B. 44,7 → 45 mg, aber 68,3 → 65 mg).
 //   Katze: Praxistabelle nach kg. Zwischengewichte (z. B. 5,5 kg): von den beiden Nachbarwerten
 //         die Dosis, die am nächsten an der Zieldosis liegt (bei Gleichstand die niedrigere).
+//         Ist es knapp (Zieldosis fast genau zwischen zwei 5-mg-Schritten, Abstände unterscheiden
+//         sich um weniger als 0,5 mg), entscheidet der Tierarzt.
 //         "null" bzw. Gewichte außerhalb der Tabelle = Rücksprache Tierarzt
 //         (Preis vorläufig nach der Hunde-Regel).
 const LOMUSTIN_ROUND_UP_MG = 1;
+const LOMUSTIN_CAT_TIE_MG = 0.5;
 const LOMUSTIN_CAT_TABLE = {2: 5, 3: 10, 4: 10, 5: 10, 6: null, 7: 15, 8: 15, 9: null, 10: null, 11: 20, 12: 20};
 const LOMUSTIN_VET_NOTE = 'Rücksprache Tierarzt – Dosierung individuell festlegen, Preis vorläufig';
 
@@ -363,7 +366,9 @@ function lomustin(kg, kof, species, mgPerM2) {
     const keys = [...new Set([Math.floor(kg), Math.ceil(kg)])];
     const doses = keys.map(k => LOMUSTIN_CAT_TABLE[k]).filter(Boolean)
       .sort((a, b) => Math.abs(a - target) - Math.abs(b - target) || a - b);
-    if (doses.length) {
+    const lo5 = Math.floor(target / 5) * 5;
+    const tie = keys.length > 1 && Math.abs((target - lo5) - (lo5 + 5 - target)) < LOMUSTIN_CAT_TIE_MG;
+    if (doses.length && !tie) {
       dose = doses[0];
       basis = ` · Praxistabelle ${keys.map(k => num(k, 0)).join('–')} kg`;
     } else note = LOMUSTIN_VET_NOTE;
