@@ -127,6 +127,12 @@ const CERENIA_IV = {mgPerKg: 1, mgPerMl: 10, pricePerMl: 11.03};
 
 const VINCRISTIN_VIAL_PRICE = 66.00;                 // Cellcristin 2 ml / 2 mg
 const DOXO = {mgPerMl: 2, pricePerMl: 17.09, surcharge: 2.38};   // Doxorubicin HCL Teva 2 mg/ml, Zuschlag je Gabe
+// Epirubicin (nur Hund): Abrechnung pro Flasche (25 ml = 50 mg), angebrochene Flasche 1 Monat haltbar.
+const EPI = {
+  name: 'EPI-cell 50mg (Hexal) | Epirubicin (OP) - *Stada (OP25ml)',
+  bottlePrice: 200.22, bottleMl: 25, mgPerMl: 2,
+  doses: 5, intervalDays: 21, shelfDays: 30,
+};
 
 const CYCLO_TABS = [
   {mg: 50, price: 12.75}, {mg: 25, price: 13.93},
@@ -383,6 +389,35 @@ function lomustin(kg, kof, species, mgPerM2) {
   };
 }
 
+// Epirubicin: Dosierung wie Doxorubicin beim Hund (< 15 kg 1 mg/kg, sonst 30 mg/m²).
+// Flaschen nur bei Bedarf: Reste einer angebrochenen Flasche werden für die nächste Gabe genutzt,
+// solange sie höchstens 30 Tage offen ist (bei Gaben alle 21 Tage also für die direkt folgende Gabe).
+function epirubicinPlan(kg, kof) {
+  const d = doseBasis(kg, kof, 'hund', 30, 1);
+  const ml = d.mg / EPI.mgPerMl;
+  let open = [];                                   // angebrochene Flaschen: {opened, left}
+  const gaben = [];
+  for (let i = 0; i < EPI.doses; i++) {
+    const day = i * EPI.intervalDays;
+    open = open.filter(b => day - b.opened <= EPI.shelfDays && b.left > 1e-9);
+    let need = ml, fromRest = 0, newBottles = 0;
+    for (const b of open) { const t = Math.min(b.left, need); b.left -= t; need -= t; fromRest += t; }
+    while (need > 1e-9) { const t = Math.min(EPI.bottleMl, need); open.push({opened: day, left: EPI.bottleMl - t}); need -= t; newBottles++; }
+    gaben.push({nr: i + 1, day, newBottles, fromRest});
+  }
+  const bottles = gaben.reduce((a, g) => a + g.newBottles, 0);
+  const plan = gaben.map(g => `${g.nr}. Gabe (Tag ${g.day}): ${[g.fromRest > 1e-9 ? `Rest ${num(g.fromRest, 2)} ml` : '', g.newBottles ? `${g.newBottles} neue Fl.` : ''].filter(Boolean).join(' + ')}`).join(' · ');
+  return {...d, ml, gaben, bottles, plan};
+}
+
+function epirubicinFirst(p) {
+  const n = p.gaben[0].newBottles;
+  return {
+    name: EPI.name, route: 'IV', price: cents(n * EPI.bottlePrice),
+    desc: `${n} × ${eur.format(EPI.bottlePrice)} pro Flasche (${EPI.bottleMl} ml) · Dosis ${num(p.ml, 2)} ml · ${num(p.mg, 2)} mg · ${p.basis}`,
+  };
+}
+
 // ── Alle Protokolle für Spezies + Gewicht ───────────────────────────────────
 function buildEstimates(kg, species) {
   const kof = getKOF(kg, species);
@@ -403,6 +438,12 @@ function buildEstimates(kg, species) {
                meds: [lomustin(kg, kof, species, 70), poAnti]});
     list.push({id: 'lom60', title: 'Lomustin', tag: 'PO · T-Zell · 60 mg/m²', std: STD.tabletten,
                meds: [lomustin(kg, kof, species, 60), poAnti]});
+  }
+  let epi = null;
+  if (species === 'hund') {
+    epi = epirubicinPlan(kg, kof);
+    list.splice(2, 0, {id: 'epi', title: 'Epirubicin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
+                       meds: [ivAnti, epirubicinFirst(epi), poAnti]});
   }
   for (const e of list) {
     e.stdRows = e.std.map(([name, price, qty = 1]) => ({
@@ -425,8 +466,20 @@ function buildEstimates(kg, species) {
   if (species === 'hund') protocols.push(
     {title: 'LOPP', tag: '24 Wochen · alle 2 Wochen Vincristin (12×), alle 4 Wochen Lomustin 60 mg/m² als Heimgabe (6×)',
      parts: [[s('vinc'), 12], [s('lom60').meds[0], 6]]});
+  if (epi) {
+    // Epirubicin: 5 Sitzungen ohne das Medikament selbst + die tatsächlich benötigten Flaschen
+    const e = s('epi'), perSession = cents(e.stdSum + ivAnti.price + poAnti.price);
+    protocols.push({title: 'Epirubicin', tag: `${EPI.doses} Gaben alle 3 Wochen · ${epi.bottles} Flasche${epi.bottles === 1 ? '' : 'n'}`,
+      rows: [
+        {name: `${EPI.doses}× Epirubicin-Sitzung (ohne Medikament)`,
+         desc: `${EPI.doses} × ${eur.format(perSession)} (Standardleistungen, Cerenia IV + PO)`, price: cents(perSession * EPI.doses)},
+        {name: `${epi.bottles}× ${EPI.name}`, route: 'IV',
+         desc: `${epi.bottles} × ${eur.format(EPI.bottlePrice)} · je Gabe ${num(epi.ml, 2)} ml · ${epi.plan}`,
+         price: cents(epi.bottles * EPI.bottlePrice)},
+      ]});
+  }
   for (const p of protocols) {
-    p.rows = p.parts.map(([e, n]) => e.total !== undefined
+    if (!p.rows) p.rows = p.parts.map(([e, n]) => e.total !== undefined
       ? {name: `${n}× ${e.title}-Sitzung`, desc: `${n} × ${eur.format(e.total)} (${e.tag})`,
          price: cents(e.total * n), note: e.individual ? 'Dosierung individuell durch Tierarzt' : ''}
       : {name: `${n}× ${e.name} (Heimgabe, nur Kapseln)`, desc: `${n} × ${eur.format(e.price)} · ${e.desc}`,
