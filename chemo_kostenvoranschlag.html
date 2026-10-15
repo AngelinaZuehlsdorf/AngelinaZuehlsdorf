@@ -487,6 +487,10 @@ function buildEstimates(kg, species) {
     p.total = sum(p.rows);
     p.individual = p.rows.some(r => r.note);
   }
+  // Anzeige alphabetisch (bei gleichem Namen nach Untertitel, z. B. Lomustin B- vor T-Zell)
+  const byName = (x, y) => x.title.localeCompare(y.title, 'de') || x.tag.localeCompare(y.tag, 'de');
+  list.sort(byName);
+  protocols.sort(byName);
   return {kof, list, protocols};
 }
 
