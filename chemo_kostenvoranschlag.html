@@ -415,23 +415,24 @@ function buildEstimates(kg, species) {
     e.total = cents(e.stdSum + e.medSum);
     e.individual = e.meds.some(m => m.note);
   }
-  // Protokolle über 12 Wochen: Summe der Einzelsitzungen (je inkl. Standardleistungen und Cerenia).
-  // Katze: Lomustin nach Katzen-Dosierung (Praxistabelle) statt 60 mg/m².
+  // Protokolle: Summe der Sitzungen (je inkl. Standardleistungen und Cerenia).
+  // LOPP (nur Hund): Lomustin gibt der Besitzer am Folgetag zu Hause → nur die Kapseln, keine Sitzung.
   const s = id => list.find(e => e.id === id);
   const protocols = [
     {title: 'CHOP', tag: '12 Wochen · je 4× Vincristin, Cyclophosphamid, Doxorubicin',
      parts: [[s('vinc'), 4], [s('cyclo'), 4], [s('doxo'), 4]]},
-    {title: 'LOPP', tag: `12 Wochen · 12× Vincristin, 6× Lomustin${species === 'hund' ? ' 60 mg/m²' : ''}`,
-     parts: [[s('vinc'), 12], [s('lom60'), 6]]},
   ];
+  if (species === 'hund') protocols.push(
+    {title: 'LOPP', tag: '12× Vincristin, 6× Lomustin 60 mg/m² (Heimgabe)',
+     parts: [[s('vinc'), 12], [s('lom60').meds[0], 6]]});
   for (const p of protocols) {
-    p.rows = p.parts.map(([e, n]) => ({
-      name: `${n}× ${e.title}-Sitzung`,
-      desc: `${n} × ${eur.format(e.total)} (${e.tag})`,
-      price: cents(e.total * n),
-    }));
+    p.rows = p.parts.map(([e, n]) => e.total !== undefined
+      ? {name: `${n}× ${e.title}-Sitzung`, desc: `${n} × ${eur.format(e.total)} (${e.tag})`,
+         price: cents(e.total * n), note: e.individual ? 'Dosierung individuell durch Tierarzt' : ''}
+      : {name: `${n}× ${e.name} (Heimgabe, nur Kapseln)`, desc: `${n} × ${eur.format(e.price)} · ${e.desc}`,
+         price: cents(e.price * n), note: e.note});
     p.total = sum(p.rows);
-    p.individual = p.parts.some(([e]) => e.individual);
+    p.individual = p.rows.some(r => r.note);
   }
   return {kof, list, protocols};
 }
