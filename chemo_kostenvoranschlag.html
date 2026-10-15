@@ -423,7 +423,7 @@ function buildEstimates(kg, species) {
      parts: [[s('vinc'), 4], [s('cyclo'), 4], [s('doxo'), 4]]},
   ];
   if (species === 'hund') protocols.push(
-    {title: 'LOPP', tag: '12× Vincristin, 6× Lomustin 60 mg/m² (Heimgabe)',
+    {title: 'LOPP', tag: '24 Wochen · alle 2 Wochen Vincristin (12×), alle 4 Wochen Lomustin 60 mg/m² als Heimgabe (6×)',
      parts: [[s('vinc'), 12], [s('lom60').meds[0], 6]]});
   for (const p of protocols) {
     p.rows = p.parts.map(([e, n]) => e.total !== undefined
