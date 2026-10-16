@@ -315,7 +315,8 @@ function doseBasis(kg, kof, species, perM2, perKg) {
 }
 
 function vincristin(kg, kof, species) {
-  const d = doseBasis(kg, kof, species, 0.7, 0.025);
+  // Hund und Katze gleich: unter 15 kg 0,025 mg/kg, ab 15 kg 0,7 mg/m²
+  const d = doseBasis(kg, kof, 'hund', 0.7, 0.025);
   return {
     name: 'Cellcristin 2 ml/2 mg (1 Flasche)', route: 'IV', price: VINCRISTIN_VIAL_PRICE,
     desc: `berechnet: ${num(d.mg, 3)} mg · ${d.basis}`,
@@ -529,7 +530,7 @@ function buildEstimates(kg, species) {
   const kof = getKOF(kg, species);
   const ivAnti = cereniaIV(kg), poAnti = cereniaPO(kg);
   const list = [
-    {id: 'vinc', title: 'Vincristin', tag: `IV · ${doseLabel(kg, species, 0.7, 0.025)}`, std: STD.vincristin,
+    {id: 'vinc', title: 'Vincristin', tag: `IV · ${doseLabel(kg, 'hund', 0.7, 0.025)}`, std: STD.vincristin,
      meds: [ivAnti, vincristin(kg, kof, species), poAnti]},
     {id: 'doxo', title: 'Doxorubicin', tag: `IV · ${doseLabel(kg, 'hund', species === 'katze' ? 25 : 30, 1)}`, std: STD.doxorubicin,
      meds: [ivAnti, doxorubicin(kg, kof, species), poAnti]},
