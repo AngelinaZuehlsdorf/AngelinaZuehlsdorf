@@ -283,10 +283,11 @@ function buildSections(kg, species) {
       cyclophosphamid(kg, kof, species),
       doxorubicin(kg, kof, species),
     ]},
-    {title: 'T-Zell Lymphom', drugs: [
+    // T-Zell-Protokoll nur beim Hund
+    ...(dog ? [{title: 'T-Zell Lymphom', drugs: [
       vincristin(kg, kof, species, 0.5, 0.018),
-      ...(dog ? [lomustin(kg, kof, species, 60)] : []),
-    ]},
+      lomustin(kg, kof, species, 60),
+    ]}] : []),
     {title: 'Lomustin Monotherapie', drugs: [lomustin(kg, kof, species, dog ? 70 : 40)]},
   ];
   // Carboplatin, Epirubicin, Mitoxantron, Vinblastin: nur Hund (wie im Kostenvoranschlag)
