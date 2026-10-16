@@ -302,6 +302,12 @@ function cereniaIV(kg) {
 }
 
 // Dosis-Basis: Hund ≥ 15 kg nach KOF, sonst nach kg (Katze immer nach kg).
+// Dosierung als kurzer Text für den Zusatz, z. B. "0,7 mg/m²" oder "0,025 mg/kg"
+const doseNum = v => v.toLocaleString('de-DE', {maximumFractionDigits: 3});
+function doseLabel(kg, species, perM2, perKg) {
+  return species === 'hund' && kg >= KOF_THRESHOLD_KG ? `${doseNum(perM2)} mg/m²` : `${doseNum(perKg)} mg/kg`;
+}
+
 function doseBasis(kg, kof, species, perM2, perKg) {
   return species === 'hund' && kg >= KOF_THRESHOLD_KG
     ? {mg: kof * perM2, basis: `${num(perM2, 1)} mg/m² × ${num(kof, 3)} m²`}
@@ -309,7 +315,8 @@ function doseBasis(kg, kof, species, perM2, perKg) {
 }
 
 function vincristin(kg, kof, species) {
-  const d = doseBasis(kg, kof, species, 0.7, 0.025);
+  // Hund und Katze gleich: unter 15 kg 0,025 mg/kg, ab 15 kg 0,7 mg/m²
+  const d = doseBasis(kg, kof, 'hund', 0.7, 0.025);
   return {
     name: 'Cellcristin 2 ml/2 mg (1 Flasche)', route: 'IV', price: VINCRISTIN_VIAL_PRICE,
     desc: `berechnet: ${num(d.mg, 3)} mg · ${d.basis}`,
@@ -319,10 +326,8 @@ function vincristin(kg, kof, species) {
 function doxorubicin(kg, kof, species) {
   let d;
   if (species === 'katze') {
-    // Katze: 30 mg/m², aber maximal 1 mg/kg
-    const byKOF = kof * 30;
-    d = byKOF > kg ? {mg: kg, basis: `Limit 1 mg/kg × ${num(kg, 1)} kg`}
-                   : {mg: byKOF, basis: `30 mg/m² × ${num(kof, 3)} m²`};
+    // Katze: unter 15 kg 1 mg/kg, ab 15 kg 25 mg/m²
+    d = doseBasis(kg, kof, 'hund', 25, 1);
   } else {
     d = doseBasis(kg, kof, species, 30, 1);
   }
@@ -366,7 +371,8 @@ function roundDownTablets(target, sizes, maxDev) {
 }
 
 function cyclophosphamid(kg, kof, species) {
-  const d = doseBasis(kg, kof, species, 250, 10);
+  // Hund: unter 15 kg 10 mg/kg, ab 15 kg 250 mg/m² · Katze: unter 15 kg 10 mg/kg, ab 15 kg 200 mg/m²
+  const d = doseBasis(kg, kof, 'hund', species === 'katze' ? 200 : 250, 10);
   const t = roundDownTablets(d.mg, CYCLO_TABS, MAX_DEVIATION);
   return {
     name: 'Cyclophosphamid Tabletten', route: 'PO', price: cents(t.price),
@@ -524,11 +530,11 @@ function buildEstimates(kg, species) {
   const kof = getKOF(kg, species);
   const ivAnti = cereniaIV(kg), poAnti = cereniaPO(kg);
   const list = [
-    {id: 'vinc', title: 'Vincristin', tag: 'IV · B-Zell', std: STD.vincristin,
+    {id: 'vinc', title: 'Vincristin', tag: `IV · ${doseLabel(kg, 'hund', 0.7, 0.025)}`, std: STD.vincristin,
      meds: [ivAnti, vincristin(kg, kof, species), poAnti]},
-    {id: 'doxo', title: 'Doxorubicin', tag: 'IV · B-Zell', std: STD.doxorubicin,
+    {id: 'doxo', title: 'Doxorubicin', tag: `IV · ${doseLabel(kg, 'hund', species === 'katze' ? 25 : 30, 1)}`, std: STD.doxorubicin,
      meds: [ivAnti, doxorubicin(kg, kof, species), poAnti]},
-    {id: 'cyclo', title: 'Cyclophosphamid', tag: 'PO · Tabletten', std: STD.tabletten,
+    {id: 'cyclo', title: 'Cyclophosphamid', tag: `PO · Tabletten · ${doseLabel(kg, 'hund', species === 'katze' ? 200 : 250, 10)}`, std: STD.tabletten,
      meds: [cyclophosphamid(kg, kof, species), poAnti]},
   ];
   if (species === 'katze') {
@@ -548,16 +554,16 @@ function buildEstimates(kg, species) {
     const vinbDose = {mg: kof * VINB.mgPerM2, basis: `${VINB.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
     vinb = bottlePlan(VINB, vinbDose);
     vinb10 = bottlePlan(VINB10, vinbDose);
-    list.push({id: 'epi', title: 'Epirubicin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
+    list.push({id: 'epi', title: 'Epirubicin', tag: `IV · ${doseLabel(kg, species, 30, 1)} · 1. Gabe mit Flaschenanbruch`, std: STD.doxorubicin,
                meds: [ivAnti, bottleFirst(EPI, epi), poAnti]});
     const carboDose = {mg: kof * CARBO.mgPerM2, basis: `${CARBO.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
     carbo = multiBottlePlan(CARBO, carboDose);
-    list.push({id: 'carbo', title: 'Carboplatin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.carboplatin,
+    list.push({id: 'carbo', title: 'Carboplatin', tag: `IV · ${CARBO.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.carboplatin,
                meds: [ivAnti, ...multiBottleFirst(CARBO, carboDose), poAnti]});
     mito = bottlePlan(MITO, {mg: kof * MITO.mgPerM2, basis: `${MITO.mgPerM2} mg/m² × ${num(kof, 3)} m²`});
-    list.push({id: 'mito', title: 'Mitoxantron', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
+    list.push({id: 'mito', title: 'Mitoxantron', tag: `IV · ${MITO.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.doxorubicin,
                meds: [ivAnti, bottleFirst(MITO, mito), poAnti]});
-    list.push({id: 'vinb', title: 'Vinblastin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.vincristin,
+    list.push({id: 'vinb', title: 'Vinblastin', tag: `IV · ${VINB.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.vincristin,
                meds: [ivAnti, bottleFirst(VINB, vinb), poAnti]});
   }
   for (const e of list) {
@@ -575,11 +581,11 @@ function buildEstimates(kg, species) {
   // LOPP (nur Hund): Lomustin gibt der Besitzer am Folgetag zu Hause → nur die Kapseln, keine Sitzung.
   const s = id => list.find(e => e.id === id);
   const protocols = [
-    {title: 'CHOP', tag: '12 Wochen · je 4× Vincristin, Cyclophosphamid, Doxorubicin',
+    {title: 'CHOP', tag: 'B-Zell Lymphom · 12 Wochen · je 4× Vincristin, Cyclophosphamid, Doxorubicin',
      parts: [[s('vinc'), 4], [s('cyclo'), 4], [s('doxo'), 4]]},
   ];
   if (species === 'hund') protocols.push(
-    {title: 'LOPP', tag: '24 Wochen · alle 2 Wochen Vincristin (12×), alle 4 Wochen Lomustin 60 mg/m² als Heimgabe (6×)',
+    {title: 'LOPP', tag: 'T-Zell Lymphom · 24 Wochen · alle 2 Wochen Vincristin (12×), alle 4 Wochen Lomustin 60 mg/m² als Heimgabe (6×)',
      parts: [[s('vinc'), 12], [s('lom60').meds[0], 6]]});
   if (epi) protocols.push(bottleProtocol('Epirubicin', EPI, epi, s('epi'), ivAnti, poAnti));
   if (carbo) protocols.push(multiBottleProtocol('Carboplatin', CARBO, carbo, s('carbo'), ivAnti, poAnti));
