@@ -130,9 +130,9 @@ const CYCLO_TABS_MG = [50, 25, 15, 12.5];
 const LOMUSTIN_CAPS_MG = [40, 20, 10, 5];
 const MAX_DEVIATION = 0.05;                        // Cyclophosphamid: bis 5 % unter Ziel abrunden
 
-// Leukeran (Chlorambucil): 2-mg-Tabletten, nicht teilbar.
+// Leukeran (Chlorambucil): 2-mg-Tabletten, nicht teilbar; bei Bedarf 0,5-mg-Kapseln (Reformulierung).
 // Hund 4 mg/m² täglich, Katze 20 mg/m² alle 2 Wochen.
-const LEUKERAN = {tabMg: 2, maxDev: 0.05,
+const LEUKERAN = {tabMg: 2, capMg: 0.5, maxDev: 0.05,   // capMg: Reformulierung zu Kapseln
   hund:  {mgPerM2: 4,  schedule: 'täglich'},
   katze: {mgPerM2: 20, schedule: 'alle 2 Wochen'}};
 
@@ -233,19 +233,28 @@ function lomustin(kg, kof, species, mgPerM2) {
   };
 }
 
-// Leukeran: auf ganze Tabletten runden (nächstliegend, bei Gleichstand weniger).
-// Weicht die Dosis mehr als 5 % vom Ziel ab → Rücksprache Tierarzt.
+// Leukeran: zuerst 2-mg-Tabletten (nächstliegende Anzahl, bei Gleichstand weniger).
+// Weicht das mehr als 5 % vom Ziel ab → 0,5-mg-Kapseln (Reformulierung) mit Hinweis.
+// Passen auch die Kapseln nicht auf 5 % → zusätzlich Rücksprache Tierarzt.
 function leukeran(kof, species) {
   const cfg = LEUKERAN[species], target = kof * cfg.mgPerM2;
-  const tabs = Math.max(1, Math.round(target / LEUKERAN.tabMg - 1e-9));
-  const mg = tabs * LEUKERAN.tabMg, dev = (mg - target) / target;
+  const round = unit => {
+    const n = Math.max(1, Math.round(target / unit - 1e-9)), mg = n * unit;
+    return {n, unit, mg, dev: (mg - target) / target, ok: Math.abs(mg - target) / target <= LEUKERAN.maxDev + 1e-9};
+  };
+  const tab = round(LEUKERAN.tabMg), cap = round(LEUKERAN.capMg);
+  // Kapseln nur, wenn sie eine andere (genauere) Dosis ergeben als die Tabletten
+  const useCap = !tab.ok && Math.abs(cap.mg - tab.mg) > 1e-9;
+  const r = useCap ? cap : tab;
+  const notes = [];
+  if (useCap) notes.push(`Mit ${num(LEUKERAN.tabMg, 0)}-mg-Tabletten nicht genau dosierbar (${num(tab.mg, 0)} mg) – Reformulierung zu ${num(LEUKERAN.capMg, 1)}-mg-Kapseln nötig`);
+  if (!r.ok) notes.push(`${useCap ? 'Auch mit Kapseln' : 'Auch mit Tabletten oder Kapseln'} nicht genau dosierbar – Rücksprache Tierarzt`);
   return {
-    name: 'Leukeran', route: 'PO', dose: `${num(mg, 0)} mg`,
-    unit: `${tabs}× ${LEUKERAN.tabMg} mg ${cfg.schedule}`,
-    basis: `Ziel ${num(target, 1)} mg · ${cfg.mgPerM2} mg/m² × ${num(kof, 3)} m² ${cfg.schedule} · ` +
-           `gegeben ${num(mg / kof, 1)} mg/m² (${dev > 0 ? '+' : ''}${num(dev * 100, 0)} %)`,
-    note: Math.abs(dev) > LEUKERAN.maxDev + 1e-9
-      ? 'Mit 2-mg-Tabletten nicht genau dosierbar – Rücksprache Tierarzt' : '',
+    name: 'Leukeran', route: 'PO', dose: `${num(r.mg, r.mg % 1 ? 1 : 0)} mg`,
+    unit: `${r.n}× ${num(r.unit, r.unit % 1 ? 1 : 0)} mg ${useCap ? 'Kps.' : 'Tbl.'} ${cfg.schedule}`,
+    basis: `Ziel ${num(target, 2)} mg · ${cfg.mgPerM2} mg/m² × ${num(kof, 3)} m² ${cfg.schedule} · ` +
+           `gegeben ${num(r.mg / kof, 1)} mg/m² (${r.dev > 0 ? '+' : ''}${num(r.dev * 100, 0)} %)`,
+    note: notes,
   };
 }
 
@@ -335,7 +344,7 @@ function drugRow(d) {
     <div class="drug-info">
       <div class="drug-name">${d.name} <span class="badge badge-${route}">${d.route}</span>${d.capped ? '<span class="badge badge-cap">Max.</span>' : ''}</div>
       <div class="drug-basis">${d.basis}</div>
-      ${d.note ? `<span class="note">${d.note}</span>` : ''}
+      ${[].concat(d.note || []).map(n => `<span class="note">${n}</span>`).join('')}
     </div>
     <div class="drug-result">
       <div class="drug-dose">${d.dose}</div>
