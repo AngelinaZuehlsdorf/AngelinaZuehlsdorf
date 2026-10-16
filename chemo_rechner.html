@@ -119,8 +119,8 @@ const CONC = {
   vinblastin:   {v: 1,    unit: 'mg/ml'},
   carboplatin:  {v: 10,   unit: 'mg/ml'},
   mitoxantron:  {v: 2,    unit: 'mg/ml'},
-  asparaginase: {v: 2500, unit: 'I.E./ml'},
-  bleomycin:    {v: 5000, unit: 'I.E./ml'},
+  asparaginase: {v: 15000 / 4, unit: 'I.E./ml', prep: '1 Fl. 15.000 I.E. + 4 ml NaCl'},
+  bleomycin:    {v: 15 / 3,    unit: 'mg/ml',   prep: '1 Fl. 15 mg + 3 ml NaCl'},
 };
 
 // Ab diesem Gewicht wird beim Hund nach KOF statt nach kg dosiert (Katze immer nach kg).
@@ -237,7 +237,7 @@ function inj(name, route, d, conc, opts = {}) {
     name, route, capped: !!opts.capped,
     dose: `${num(ml, opts.mlDigits ?? 2)} ml`,
     unit: isIE ? `${ie(d.mg)} I.E. gesamt` : `${num(d.mg, opts.mgDigits ?? 2)} mg gesamt`,
-    basis: `${d.basis} · ${num(conc.v, 0)} ${conc.unit}`,
+    basis: `${d.basis} · ${num(conc.v, 0)} ${conc.unit}${conc.prep ? ` (${conc.prep})` : ''}`,
   };
 }
 
@@ -272,7 +272,7 @@ function asparaginase(kg) {
 }
 
 function bleomycin(kof) {
-  return inj('Bleomycin', 'IV', {mg: kof * 15000, basis: `15.000 I.E./m² × ${num(kof, 3)} m²`}, CONC.bleomycin);
+  return inj('Bleomycin', 'IV', byKOF(kof, 15), CONC.bleomycin);
 }
 
 function buildSections(kg, species) {
