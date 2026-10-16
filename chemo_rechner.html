@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chemo-Rechner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.42.0/dist/tabler-icons.min.css">
+<style>
+:root{
+  --bg:#f6f6f4; --card:#fff; --soft:#f0efec; --text:#1d1d1b; --muted:#6b6a66;
+  --border:#e2e0db; --border-strong:#cfccc5;
+  --accent:#1f5fa8; --accent-soft:#e6f1fb;
+  --iv-bg:#e6f1fb; --iv-fg:#0c447c; --sc-bg:#e1f5ee; --sc-fg:#085041; --po-bg:#faeeda; --po-fg:#633806;
+  --cap-bg:#fcebeb; --cap-fg:#791f1f;
+  --warn-bg:#fdf3d8; --warn-fg:#6b4a00;
+  --radius:10px; --font:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#191918; --card:#232321; --soft:#2c2c2a; --text:#ecebe7; --muted:#a3a19b;
+  --border:#3a3936; --border-strong:#4a4945;
+  --accent:#7db3ee; --accent-soft:#1d3047;
+  --iv-bg:#1d3047; --iv-fg:#a9cff5; --sc-bg:#123a30; --sc-fg:#9fe1cb; --po-bg:#3d2f17; --po-fg:#f0cf94;
+  --cap-bg:#4a1c1c; --cap-fg:#f7c1c1;
+  --warn-bg:#3d3214; --warn-fg:#f3d98a;
+}}
+:root[data-theme="dark"]{
+  --bg:#191918; --card:#232321; --soft:#2c2c2a; --text:#ecebe7; --muted:#a3a19b;
+  --border:#3a3936; --border-strong:#4a4945;
+  --accent:#7db3ee; --accent-soft:#1d3047;
+  --iv-bg:#1d3047; --iv-fg:#a9cff5; --sc-bg:#123a30; --sc-fg:#9fe1cb; --po-bg:#3d2f17; --po-fg:#f0cf94;
+  --cap-bg:#4a1c1c; --cap-fg:#f7c1c1;
+  --warn-bg:#3d3214; --warn-fg:#f3d98a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.4}
+.wrap{max-width:640px;margin:0 auto;padding:1.25rem 16px 2rem}
+h1{font-size:20px;font-weight:600;margin-bottom:14px}
+.section-header{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:12px}
+.field-label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+
+.species-toggle{display:flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.species-btn{flex:1;height:40px;border:none;background:transparent;cursor:pointer;font:inherit;font-size:15px;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:6px}
+.species-btn+.species-btn{border-left:1px solid var(--border-strong)}
+.species-btn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.species-btn:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:16px;color:var(--text);background:var(--card);border:1px solid var(--border-strong);border-radius:8px}
+.kof{display:flex;justify-content:space-between;align-items:center;background:var(--soft);border-radius:8px;padding:10px 14px;margin-top:12px}
+.kof span:first-child{font-size:13px;color:var(--muted)}
+.kof strong{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.warn{background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;padding:8px 12px;font-size:12px;margin-top:10px}
+
+.placeholder{text-align:center;padding:2.5rem 1rem;color:var(--muted);font-size:14px}
+.placeholder i{font-size:32px;display:block;margin-bottom:8px}
+
+.drug-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
+.drug-row:last-child{border-bottom:none}
+.drug-info{flex:1;min-width:0}
+.drug-name{font-size:14px;font-weight:600}
+.drug-basis{font-size:11px;color:var(--muted);margin-top:2px}
+.drug-result{text-align:right;white-space:nowrap}
+.drug-dose{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.drug-unit{font-size:11px;color:var(--muted);margin-top:1px;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:600;vertical-align:middle}
+.badge-iv{background:var(--iv-bg);color:var(--iv-fg)}
+.badge-sc{background:var(--sc-bg);color:var(--sc-fg)}
+.badge-po{background:var(--po-bg);color:var(--po-fg)}
+.badge-cap{background:var(--cap-bg);color:var(--cap-fg);margin-left:4px}
+.note{display:block;width:fit-content;max-width:100%;font-size:11px;font-weight:600;background:var(--warn-bg);color:var(--warn-fg);border-radius:4px;padding:2px 6px;margin-top:4px}
+.info{font-size:12px;color:var(--muted)}
+
+.toolbar{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-bottom:8px}
+.toolbar span{font-size:12px;color:var(--muted)}
+.toolbar button{font:inherit;font-size:12px;color:var(--muted);background:transparent;border:1px solid var(--border-strong);border-radius:6px;padding:4px 10px;cursor:pointer}
+.disclaimer{font-size:11px;color:var(--muted);text-align:center;margin-top:8px}
+
+@media print{
+  body{background:#fff}
+  .toolbar button,.species-toggle{display:none!important}
+  .card{break-inside:avoid;border-color:#ccc}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Chemo-Rechner</h1>
+
+  <section class="card" aria-labelledby="patient-h">
+    <p class="section-header" id="patient-h">Patient</p>
+    <span class="field-label" id="species-label">Spezies</span>
+    <div class="species-toggle" role="group" aria-labelledby="species-label">
+      <button type="button" class="species-btn" data-species="hund" aria-pressed="true"><i class="ti ti-dog" aria-hidden="true"></i> Hund</button>
+      <button type="button" class="species-btn" data-species="katze" aria-pressed="false"><i class="ti ti-cat" aria-hidden="true"></i> Katze</button>
+    </div>
+    <label class="field-label" for="weight">Körpergewicht (kg)</label>
+    <input type="number" id="weight" inputmode="decimal" min="0.1" max="100" step="0.1" placeholder="z. B. 25,0" autocomplete="off">
+    <div class="kof" id="kof" hidden><span>Körperoberfläche (KOF)</span><strong id="kof-value"></strong></div>
+    <div class="warn" id="warn" hidden></div>
+  </section>
+
+  <div id="results" aria-live="polite"></div>
+
+  <p class="disclaimer">Alle Angaben ohne Gewähr. Dosierungen immer durch Tierarzt überprüfen.</p>
+</main>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════════════
+//  STAMMDATEN – nur hier anpassen (Regeln wie im Chemo-Kostenvoranschlag)
+// ════════════════════════════════════════════════════════════════════════════
+
+// Konzentrationen der Fertiglösungen
+const CONC = {
+  vincristin:   {v: 1,    unit: 'mg/ml'},
+  doxorubicin:  {v: 2,    unit: 'mg/ml'},
+  epirubicin:   {v: 2,    unit: 'mg/ml'},
+  vinblastin:   {v: 1,    unit: 'mg/ml'},
+  carboplatin:  {v: 10,   unit: 'mg/ml'},
+  mitoxantron:  {v: 2,    unit: 'mg/ml'},
+  asparaginase: {v: 2500, unit: 'I.E./ml'},
+  bleomycin:    {v: 5000, unit: 'I.E./ml'},
+};
+
+// Ab diesem Gewicht wird beim Hund nach KOF statt nach kg dosiert (Katze immer nach kg).
+const KOF_THRESHOLD_KG = 15;
+
+const CYCLO_TABS_MG = [50, 25, 15, 12.5];
+const LOMUSTIN_CAPS_MG = [40, 20, 10, 5];
+const MAX_DEVIATION = 0.05;                        // Cyclophosphamid: bis 5 % unter Ziel abrunden
+
+const ASPARAGINASE = {iePerKg: 400, maxIE: 10000};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  HILFSFUNKTIONEN
+// ════════════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const num = (v, d) => v.toLocaleString('de-DE', {minimumFractionDigits: d, maximumFractionDigits: d});
+const ie = v => Math.round(v).toLocaleString('de-DE');
+const rate = v => v.toLocaleString('de-DE', {maximumFractionDigits: 3});   // Dosisfaktor ohne überflüssige Nullen
+
+// KOF nach Meeh: KOF (m²) = K × kg^(2/3) / 100 — Hund K = 10,1, Katze K = 10,0.
+function getKOF(kg, species) {
+  return (species === 'hund' ? 10.1 : 10.0) * Math.pow(kg, 2 / 3) / 100;
+}
+
+// Dosis-Basis: Hund ≥ 15 kg nach KOF, sonst nach kg (Katze immer nach kg).
+function doseBasis(kg, kof, species, perM2, perKg) {
+  return species === 'hund' && kg >= KOF_THRESHOLD_KG
+    ? {mg: kof * perM2, basis: `${rate(perM2)} mg/m² × ${num(kof, 3)} m²`}
+    : {mg: kg * perKg, basis: `${rate(perKg)} mg/kg × ${num(kg, 1)} kg`};
+}
+
+const byKOF = (kof, perM2) => ({mg: kof * perM2, basis: `${rate(perM2)} mg/m² × ${num(kof, 3)} m²`});
+
+// Wenigste Tabletten/Kapseln je Menge (0,5-mg-Raster wegen 12,5 mg).
+function tabletTable(maxMg, sizes) {
+  const STEP = 2, units = sizes.map(s => Math.round(s * STEP));
+  const limit = Math.ceil(maxMg * STEP);
+  const best = [{tabs: 0, from: -1}];
+  for (let a = 1; a <= limit; a++) {
+    best[a] = null;
+    units.forEach((u, i) => {
+      const p = best[a - u];
+      if (p && (!best[a] || p.tabs + 1 < best[a].tabs)) best[a] = {tabs: p.tabs + 1, from: i};
+    });
+  }
+  const desc = a => {
+    const counts = sizes.map(() => 0);
+    for (let x = a; x > 0; x -= units[best[x].from]) counts[best[x].from]++;
+    return sizes.map((s, i) => counts[i] ? `${counts[i]}× ${num(s, s % 1 ? 1 : 0)} mg` : '').filter(Boolean).join(' + ');
+  };
+  return {STEP, best, desc};
+}
+
+// Cyclophosphamid: bis 5 % unter dem Ziel die Kombination mit den wenigsten Tabletten
+// (bei gleicher Anzahl die höhere Dosis). Passt nichts: nächstliegende Dosis + Hinweis.
+function cycloTablets(target) {
+  const {STEP, best, desc} = tabletTable(target + Math.max(...CYCLO_TABS_MG), CYCLO_TABS_MG);
+  const lo = Math.ceil(target * (1 - MAX_DEVIATION) * STEP - 1e-9), t = Math.floor(target * STEP + 1e-9);
+  let pick = -1;
+  for (let a = t; a >= Math.max(lo, 1); a--)
+    if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;
+  if (pick >= 0) return {mg: pick / STEP, desc: desc(pick), note: ''};
+  for (let a = 1; a < best.length; a++) {
+    if (!best[a]) continue;
+    const d = Math.abs(a / STEP - target), bd = pick < 0 ? Infinity : Math.abs(pick / STEP - target);
+    if (d < bd - 1e-9 || (Math.abs(d - bd) < 1e-9 && a / STEP <= target)) pick = a;
+  }
+  return {mg: pick / STEP, desc: desc(pick),
+    note: 'Keine Kombination bis 5 % unter Ziel möglich – Dosierung individuell durch Tierarzt festlegen'};
+}
+
+// Lomustin (Kapseln in 5-mg-Schritten):
+//   Hund: auf den nächsten 5-mg-Schritt abrunden; fehlt bis zum nächsthöheren Schritt
+//         höchstens 1 mg, wird aufgerundet (z. B. 44,7 → 45 mg, aber 68,3 → 65 mg).
+//   Katze: Praxistabelle nach kg; Zwischengewichte → Nachbarwert, der am nächsten an der
+//         Zieldosis liegt. Knapp dazwischen oder außerhalb der Tabelle → Rücksprache Tierarzt.
+const LOMUSTIN_ROUND_UP_MG = 1;
+const LOMUSTIN_CAT_TIE_MG = 0.5;
+const LOMUSTIN_CAT_TABLE = {2: 5, 3: 10, 4: 10, 5: 10, 6: null, 7: 15, 8: 15, 9: null, 10: null, 11: 20, 12: 20};
+const LOMUSTIN_VET_NOTE = 'Rücksprache Tierarzt – Dosierung individuell festlegen';
+
+function lomustin(kg, kof, species, mgPerM2) {
+  const target = kof * mgPerM2;
+  let dose = Math.floor(target / 5) * 5;
+  if (dose + 5 - target <= LOMUSTIN_ROUND_UP_MG + 1e-9) dose += 5;
+  let note = dose < 5 ? LOMUSTIN_VET_NOTE : '', extra = '';
+  if (species === 'katze') {
+    const keys = [...new Set([Math.floor(kg), Math.ceil(kg)])];
+    const doses = keys.map(k => LOMUSTIN_CAT_TABLE[k]).filter(Boolean)
+      .sort((a, b) => Math.abs(a - target) - Math.abs(b - target) || a - b);
+    const lo5 = Math.floor(target / 5) * 5;
+    const tie = keys.length > 1 && Math.abs((target - lo5) - (lo5 + 5 - target)) < LOMUSTIN_CAT_TIE_MG;
+    if (doses.length && !tie) {
+      dose = doses[0];
+      extra = ` · Praxistabelle ${keys.map(k => num(k, 0)).join('–')} kg`;
+    } else note = LOMUSTIN_VET_NOTE;
+  }
+  dose = Math.max(dose, 5);
+  const {STEP, desc} = tabletTable(dose, LOMUSTIN_CAPS_MG);
+  return {
+    name: 'Lomustin', route: 'PO', dose: `${num(dose, 0)} mg`, unit: desc(dose * STEP),
+    basis: `Ziel ${num(target, 1)} mg · ${mgPerM2} mg/m² × ${num(kof, 3)} m²${extra}`, note,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  WIRKSTOFFE
+// ════════════════════════════════════════════════════════════════════════════
+
+// Injektionslösung: Volumen groß, Gesamtmenge klein
+function inj(name, route, d, conc, opts = {}) {
+  const ml = d.mg / conc.v, isIE = conc.unit.startsWith('I.E.');
+  return {
+    name, route, capped: !!opts.capped,
+    dose: `${num(ml, opts.mlDigits ?? 2)} ml`,
+    unit: isIE ? `${ie(d.mg)} I.E. gesamt` : `${num(d.mg, opts.mgDigits ?? 2)} mg gesamt`,
+    basis: `${d.basis} · ${num(conc.v, 0)} ${conc.unit}`,
+  };
+}
+
+function vincristin(kg, kof, species, perM2, perKg) {
+  return inj('Vincristin', 'IV', doseBasis(kg, kof, species, perM2, perKg), CONC.vincristin, {mgDigits: 3});
+}
+
+function doxorubicin(kg, kof, species) {
+  if (species === 'katze') {
+    // Katze: 30 mg/m², aber maximal 1 mg/kg
+    const k = kof * 30;
+    return k > kg
+      ? inj('Doxorubicin', 'IV', {mg: kg, basis: `Limit 1 mg/kg × ${num(kg, 1)} kg`}, CONC.doxorubicin, {capped: true})
+      : inj('Doxorubicin', 'IV', byKOF(kof, 30), CONC.doxorubicin);
+  }
+  return inj('Doxorubicin', 'IV', doseBasis(kg, kof, species, 30, 1), CONC.doxorubicin);
+}
+
+function cyclophosphamid(kg, kof, species) {
+  const d = doseBasis(kg, kof, species, 250, 10);
+  const t = cycloTablets(d.mg);
+  return {name: 'Cyclophosphamid', route: 'PO', dose: `${num(t.mg, t.mg % 1 ? 1 : 0)} mg`, unit: t.desc,
+          basis: `Ziel ${num(d.mg, 1)} mg · ${d.basis}`, note: t.note};
+}
+
+function asparaginase(kg) {
+  const raw = kg * ASPARAGINASE.iePerKg, capped = raw > ASPARAGINASE.maxIE;
+  const d = {mg: Math.min(raw, ASPARAGINASE.maxIE),
+             basis: capped ? `Limit ${ie(ASPARAGINASE.maxIE)} I.E. (berechnet: ${ie(raw)} I.E.)`
+                           : `${ASPARAGINASE.iePerKg} I.E./kg × ${num(kg, 1)} kg`};
+  return inj('Asparaginase', 'SC', d, CONC.asparaginase, {capped});
+}
+
+function bleomycin(kof) {
+  return inj('Bleomycin', 'IV', {mg: kof * 15000, basis: `15.000 I.E./m² × ${num(kof, 3)} m²`}, CONC.bleomycin);
+}
+
+function buildSections(kg, species) {
+  const kof = getKOF(kg, species), dog = species === 'hund';
+  const sections = [
+    {title: 'B-Zell Lymphom', drugs: [
+      vincristin(kg, kof, species, 0.7, 0.025),
+      cyclophosphamid(kg, kof, species),
+      doxorubicin(kg, kof, species),
+    ]},
+    {title: 'T-Zell Lymphom', drugs: [
+      vincristin(kg, kof, species, 0.5, 0.018),
+      ...(dog ? [lomustin(kg, kof, species, 60)] : []),
+    ]},
+    {title: 'Lomustin Monotherapie', drugs: [lomustin(kg, kof, species, dog ? 70 : 40)]},
+  ];
+  // Carboplatin, Epirubicin, Mitoxantron, Vinblastin: nur Hund (wie im Kostenvoranschlag)
+  const more = dog ? [
+    inj('Vinblastin',  'IV', byKOF(kof, 2), CONC.vinblastin),
+    inj('Epirubicin',  'IV', doseBasis(kg, kof, species, 30, 1), CONC.epirubicin),
+    inj('Carboplatin', 'IV', byKOF(kof, 300), CONC.carboplatin, {mlDigits: 1, mgDigits: 0}),
+    inj('Mitoxantron', 'IV', byKOF(kof, 5), CONC.mitoxantron),
+  ] : [];
+  sections.push({title: 'Weitere Wirkstoffe', drugs: [...more, asparaginase(kg), bleomycin(kof)],
+    info: dog ? '' : 'Vinblastin, Epirubicin, Carboplatin und Mitoxantron bei der Katze nur nach Rücksprache Tierarzt (abweichende Dosierung).'});
+  return {kof, sections};
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  AUSGABE
+// ════════════════════════════════════════════════════════════════════════════
+function drugRow(d) {
+  const route = d.route.toLowerCase();
+  return `<div class="drug-row">
+    <div class="drug-info">
+      <div class="drug-name">${d.name} <span class="badge badge-${route}">${d.route}</span>${d.capped ? '<span class="badge badge-cap">Max.</span>' : ''}</div>
+      <div class="drug-basis">${d.basis}</div>
+      ${d.note ? `<span class="note">${d.note}</span>` : ''}
+    </div>
+    <div class="drug-result">
+      <div class="drug-dose">${d.dose}</div>
+      <div class="drug-unit">${d.unit}</div>
+    </div>
+  </div>`;
+}
+
+let species = 'hund';
+
+function render() {
+  const kg = parseFloat(String($('weight').value).replace(',', '.'));
+  const warn = $('warn');
+  warn.hidden = true;
+
+  if (!(kg > 0)) {
+    $('kof').hidden = true;
+    $('results').innerHTML = `<div class="placeholder"><i class="ti ti-calculator" aria-hidden="true"></i>Gewicht eingeben, um die Dosierungen zu berechnen</div>`;
+    return;
+  }
+  if ((species === 'katze' && kg > 15) || kg > 100) {
+    warn.textContent = `Ungewöhnliches Gewicht für ${species === 'katze' ? 'eine Katze' : 'einen Hund'} – bitte Eingabe prüfen.`;
+    warn.hidden = false;
+  }
+
+  const {kof, sections} = buildSections(kg, species);
+  $('kof-value').textContent = `${num(kof, 3)} m²`;
+  $('kof').hidden = false;
+
+  $('results').innerHTML =
+    `<div class="toolbar"><span>${species === 'hund' ? 'Hund' : 'Katze'}, ${num(kg, 1)} kg · ${num(kof, 3)} m²</span>` +
+    `<button type="button" onclick="print()"><i class="ti ti-printer" aria-hidden="true"></i> Drucken</button></div>` +
+    sections.map(s => `<section class="card"><p class="section-header">${s.title}</p>` +
+      s.drugs.map(drugRow).join('') +
+      (s.info ? `<p class="info">${s.info}</p>` : '') + `</section>`).join('');
+}
+
+document.querySelectorAll('.species-btn').forEach(btn => btn.addEventListener('click', () => {
+  species = btn.dataset.species;
+  document.querySelectorAll('.species-btn').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  $('weight').placeholder = species === 'hund' ? 'z. B. 25,0' : 'z. B. 4,5';
+  render();
+}));
+$('weight').addEventListener('input', render);
+render();
+</script>
+</body>
+</html>
