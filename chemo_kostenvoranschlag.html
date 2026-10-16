@@ -139,6 +139,11 @@ const VINB = {
   bottlePrice: 237.88, bottleMl: 10, mgPerMl: 1, shelfDays: 30, mgPerM2: 2,
   days: [0, 7, 14, 21, 35, 49, 63, 77], schedule: '8 Gaben: 4× wöchentlich, dann 4× alle 2 Wochen',
 };
+const MITO = {
+  name: 'Mitoxantron 10mg Hexal (OP) - *Rebopharm (5ml)',
+  bottlePrice: 160.44, bottleMl: 5, mgPerMl: 2, shelfDays: 14, mgPerM2: 5,
+  days: [0, 21, 42, 63, 84], schedule: '5 Gaben alle 3 Wochen',
+};
 const VINB10 = {...VINB,
   days: [0, 7, 14, 21, 28, 42, 56, 70, 84, 98], schedule: '10 Gaben: 5× wöchentlich, dann 5× alle 2 Wochen',
 };
@@ -458,8 +463,8 @@ function buildEstimates(kg, species) {
     list.push({id: 'lom60', title: 'Lomustin', tag: 'PO · T-Zell · 60 mg/m²', std: STD.tabletten,
                meds: [lomustin(kg, kof, species, 60), poAnti]});
   }
-  // Epirubicin (Dosierung wie Doxorubicin) und Vinblastin (2 mg/m²): nur Hund, Flaschenabrechnung
-  let epi = null, vinb = null, vinb10 = null;
+  // Epirubicin (Dosierung wie Doxorubicin), Mitoxantron (5 mg/m²), Vinblastin (2 mg/m²): nur Hund, Flaschenabrechnung
+  let epi = null, vinb = null, vinb10 = null, mito = null;
   if (species === 'hund') {
     epi = bottlePlan(EPI, doseBasis(kg, kof, 'hund', 30, 1));
     const vinbDose = {mg: kof * VINB.mgPerM2, basis: `${VINB.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
@@ -467,6 +472,9 @@ function buildEstimates(kg, species) {
     vinb10 = bottlePlan(VINB10, vinbDose);
     list.push({id: 'epi', title: 'Epirubicin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
                meds: [ivAnti, bottleFirst(EPI, epi), poAnti]});
+    mito = bottlePlan(MITO, {mg: kof * MITO.mgPerM2, basis: `${MITO.mgPerM2} mg/m² × ${num(kof, 3)} m²`});
+    list.push({id: 'mito', title: 'Mitoxantron', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
+               meds: [ivAnti, bottleFirst(MITO, mito), poAnti]});
     list.push({id: 'vinb', title: 'Vinblastin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.vincristin,
                meds: [ivAnti, bottleFirst(VINB, vinb), poAnti]});
   }
@@ -492,6 +500,7 @@ function buildEstimates(kg, species) {
     {title: 'LOPP', tag: '24 Wochen · alle 2 Wochen Vincristin (12×), alle 4 Wochen Lomustin 60 mg/m² als Heimgabe (6×)',
      parts: [[s('vinc'), 12], [s('lom60').meds[0], 6]]});
   if (epi) protocols.push(bottleProtocol('Epirubicin', EPI, epi, s('epi'), ivAnti, poAnti));
+  if (mito) protocols.push(bottleProtocol('Mitoxantron', MITO, mito, s('mito'), ivAnti, poAnti));
   if (vinb) protocols.push(bottleProtocol('Vinblastin', VINB, vinb, s('vinb'), ivAnti, poAnti));
   if (vinb10) protocols.push(bottleProtocol('Vinblastin', VINB10, vinb10, s('vinb'), ivAnti, poAnti));
   for (const p of protocols) {
