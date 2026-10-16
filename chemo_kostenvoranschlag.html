@@ -144,6 +144,15 @@ const MITO = {
   bottlePrice: 160.44, bottleMl: 5, mgPerMl: 2, shelfDays: 14, mgPerM2: 5,
   days: [0, 21, 42, 63, 84], schedule: '5 Gaben alle 3 Wochen',
 };
+// Carboplatin: zwei Flaschengrößen (10 mg/ml), es wird die insgesamt günstigste Kombination gewählt.
+const CARBO = {
+  sizes: [
+    {name: 'Carbo-cell 150mg | Carboplatin (OP) - *Stada (OP15ml)', ml: 15, price: 111.69},
+    {name: 'Carbo-cell 450mg | Carboplatin (OP) - *Stada (OP45ml)', ml: 45, price: 290.07},
+  ],
+  mgPerMl: 10, shelfDays: 30, mgPerM2: 300,
+  days: [0, 21, 42, 63, 84], schedule: '5 Gaben alle 3 Wochen',
+};
 const VINB10 = {...VINB,
   days: [0, 7, 14, 21, 28, 42, 56, 70, 84, 98], schedule: '10 Gaben: 5× wöchentlich, dann 5× alle 2 Wochen',
 };
@@ -198,6 +207,8 @@ const STD = {
     ['VBM Zytostatika Tabletten', 11.57],
     ['Praxis FeliGum Trojaner (St)', 2.42]],
 };
+// Carboplatin: wie Doxorubicin, aber Glucose 5 % statt NaCl 0,9 %
+STD.carboplatin = STD.doxorubicin.map(r => r[0] === 'Isot. NaCl 0,9 % (500 ml)' ? ['Glucose 5% EP 500ml', 4.40] : r);
 
 // ════════════════════════════════════════════════════════════════════════════
 //  HILFSFUNKTIONEN
@@ -430,6 +441,72 @@ function bottleFirst(cfg, p) {
 }
 
 // Protokoll: alle Sitzungen ohne das Medikament selbst + die tatsächlich benötigten Flaschen
+// Mehrere Flaschengrößen: günstigste Kombination über alle Gaben (Suche über alle sinnvollen
+// Möglichkeiten). Ein Rest ist nur bei der direkt folgenden Gabe nutzbar, wenn sie innerhalb von
+// shelfDays liegt. Flaschen werden erst geöffnet, wenn sie gebraucht werden.
+function multiBottlePlan(cfg, d, doses = cfg.days.length) {
+  const ml = d.mg / cfg.mgPerMl, S = cfg.sizes;
+  let best = null;
+  const picks = [];
+  (function rec(i, carry, cost, n) {
+    if (best && cost > best.cost + 1e-9) return;
+    if (i === doses) {
+      if (!best || cost < best.cost - 1e-9 || (Math.abs(cost - best.cost) < 1e-9 && n < best.n))
+        best = {cost, n, picks: picks.map(p => ({...p, counts: [...p.counts]}))};
+      return;
+    }
+    const need = Math.max(0, ml - carry), fromRest = Math.min(carry, ml);
+    const carryOk = i + 1 < doses && cfg.days[i + 1] - cfg.days[i] <= cfg.shelfDays;
+    if (need <= 1e-9) {
+      picks.push({counts: S.map(() => 0), fromRest}); rec(i + 1, 0, cost, n); picks.pop();
+      return;
+    }
+    const combos = [[]];
+    for (const s of S) {
+      const next = [];
+      for (const c of combos) for (let k = 0; k <= Math.ceil(need / s.ml); k++) next.push([...c, k]);
+      combos.splice(0, combos.length, ...next);
+    }
+    for (const c of combos) {
+      const vol = c.reduce((a, k, j) => a + k * S[j].ml, 0);
+      if (vol < need - 1e-9) continue;
+      if (c.some((k, j) => k > 0 && vol - S[j].ml >= need - 1e-9)) continue;   // eine Flasche zu viel
+      picks.push({counts: c, fromRest});
+      rec(i + 1, carryOk ? vol - need : 0, cost + c.reduce((a, k, j) => a + k * S[j].price, 0), n + c.reduce((a, k) => a + k, 0));
+      picks.pop();
+    }
+  })(0, 0, 0, 0);
+  const totals = S.map((_, j) => best.picks.reduce((a, p) => a + p.counts[j], 0));
+  const plan = best.picks.map((p, i) => `${i + 1}. Gabe (Tag ${cfg.days[i]}): ${[
+    p.fromRest > 1e-9 ? `Rest ${num(p.fromRest, 2)} ml` : '',
+    ...p.counts.map((k, j) => k ? `${k}× ${S[j].ml} ml` : ''),
+  ].filter(Boolean).join(' + ')}`).join(' · ');
+  return {...d, ml, picks: best.picks, totals, cost: best.cost, plan};
+}
+
+// Einzelsitzung: günstigste Flaschen für eine einzelne Gabe
+function multiBottleFirst(cfg, d) {
+  const p = multiBottlePlan(cfg, d, 1);
+  return cfg.sizes.map((s, j) => p.totals[j] ? {
+    name: s.name, route: 'IV', price: cents(p.totals[j] * s.price),
+    desc: `${p.totals[j]} × ${eur.format(s.price)} pro Flasche (${s.ml} ml) · Dosis ${num(p.ml, 2)} ml · ${num(p.mg, 1)} mg · ${p.basis}`,
+  } : null).filter(Boolean);
+}
+
+function multiBottleProtocol(title, cfg, p, session, ivAnti, poAnti) {
+  const n = cfg.days.length, perSession = cents(session.stdSum + ivAnti.price + poAnti.price);
+  const count = p.totals.reduce((a, k) => a + k, 0);
+  const bottles = cfg.sizes.map((s, j) => p.totals[j] ? {name: `${p.totals[j]}× ${s.name}`, route: 'IV',
+    desc: `${p.totals[j]} × ${eur.format(s.price)}`, price: cents(p.totals[j] * s.price)} : null).filter(Boolean);
+  bottles.at(-1).desc += ` · je Gabe ${num(p.ml, 2)} ml · ${p.plan}`;
+  return {title, tag: `${cfg.schedule} · ${count} Flasche${count === 1 ? '' : 'n'}`,
+    rows: [
+      {name: `${n}× ${title}-Sitzung (ohne Medikament)`,
+       desc: `${n} × ${eur.format(perSession)} (Standardleistungen, Cerenia IV + PO)`, price: cents(perSession * n)},
+      ...bottles,
+    ]};
+}
+
 function bottleProtocol(title, cfg, p, session, ivAnti, poAnti) {
   const n = cfg.days.length, perSession = cents(session.stdSum + ivAnti.price + poAnti.price);
   return {title, tag: `${cfg.schedule} · ${p.bottles} Flasche${p.bottles === 1 ? '' : 'n'}`,
@@ -463,8 +540,9 @@ function buildEstimates(kg, species) {
     list.push({id: 'lom60', title: 'Lomustin', tag: 'PO · T-Zell · 60 mg/m²', std: STD.tabletten,
                meds: [lomustin(kg, kof, species, 60), poAnti]});
   }
-  // Epirubicin (Dosierung wie Doxorubicin), Mitoxantron (5 mg/m²), Vinblastin (2 mg/m²): nur Hund, Flaschenabrechnung
-  let epi = null, vinb = null, vinb10 = null, mito = null;
+  // Carboplatin (300 mg/m²), Epirubicin (wie Doxorubicin), Mitoxantron (5 mg/m²), Vinblastin (2 mg/m²):
+  // nur Hund, Flaschenabrechnung
+  let epi = null, vinb = null, vinb10 = null, mito = null, carbo = null;
   if (species === 'hund') {
     epi = bottlePlan(EPI, doseBasis(kg, kof, 'hund', 30, 1));
     const vinbDose = {mg: kof * VINB.mgPerM2, basis: `${VINB.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
@@ -472,6 +550,10 @@ function buildEstimates(kg, species) {
     vinb10 = bottlePlan(VINB10, vinbDose);
     list.push({id: 'epi', title: 'Epirubicin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
                meds: [ivAnti, bottleFirst(EPI, epi), poAnti]});
+    const carboDose = {mg: kof * CARBO.mgPerM2, basis: `${CARBO.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
+    carbo = multiBottlePlan(CARBO, carboDose);
+    list.push({id: 'carbo', title: 'Carboplatin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.carboplatin,
+               meds: [ivAnti, ...multiBottleFirst(CARBO, carboDose), poAnti]});
     mito = bottlePlan(MITO, {mg: kof * MITO.mgPerM2, basis: `${MITO.mgPerM2} mg/m² × ${num(kof, 3)} m²`});
     list.push({id: 'mito', title: 'Mitoxantron', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
                meds: [ivAnti, bottleFirst(MITO, mito), poAnti]});
@@ -500,6 +582,7 @@ function buildEstimates(kg, species) {
     {title: 'LOPP', tag: '24 Wochen · alle 2 Wochen Vincristin (12×), alle 4 Wochen Lomustin 60 mg/m² als Heimgabe (6×)',
      parts: [[s('vinc'), 12], [s('lom60').meds[0], 6]]});
   if (epi) protocols.push(bottleProtocol('Epirubicin', EPI, epi, s('epi'), ivAnti, poAnti));
+  if (carbo) protocols.push(multiBottleProtocol('Carboplatin', CARBO, carbo, s('carbo'), ivAnti, poAnti));
   if (mito) protocols.push(bottleProtocol('Mitoxantron', MITO, mito, s('mito'), ivAnti, poAnti));
   if (vinb) protocols.push(bottleProtocol('Vinblastin', VINB, vinb, s('vinb'), ivAnti, poAnti));
   if (vinb10) protocols.push(bottleProtocol('Vinblastin', VINB10, vinb10, s('vinb'), ivAnti, poAnti));
