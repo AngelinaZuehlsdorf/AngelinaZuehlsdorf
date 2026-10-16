@@ -524,9 +524,9 @@ function buildEstimates(kg, species) {
   const kof = getKOF(kg, species);
   const ivAnti = cereniaIV(kg), poAnti = cereniaPO(kg);
   const list = [
-    {id: 'vinc', title: 'Vincristin', tag: 'IV · B-Zell', std: STD.vincristin,
+    {id: 'vinc', title: 'Vincristin', tag: 'IV', std: STD.vincristin,
      meds: [ivAnti, vincristin(kg, kof, species), poAnti]},
-    {id: 'doxo', title: 'Doxorubicin', tag: 'IV · B-Zell', std: STD.doxorubicin,
+    {id: 'doxo', title: 'Doxorubicin', tag: 'IV', std: STD.doxorubicin,
      meds: [ivAnti, doxorubicin(kg, kof, species), poAnti]},
     {id: 'cyclo', title: 'Cyclophosphamid', tag: 'PO · Tabletten', std: STD.tabletten,
      meds: [cyclophosphamid(kg, kof, species), poAnti]},
