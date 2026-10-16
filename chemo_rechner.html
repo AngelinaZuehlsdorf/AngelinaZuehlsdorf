@@ -146,6 +146,7 @@ function getKOF(kg, species) {
 }
 
 // Dosis-Basis: Hund ≥ 15 kg nach KOF, sonst nach kg (Katze immer nach kg).
+// Mit species = 'hund' gilt die 15-kg-Grenze auch für die Katze (Vincristin, Doxorubicin, Cyclophosphamid).
 function doseBasis(kg, kof, species, perM2, perKg) {
   return species === 'hund' && kg >= KOF_THRESHOLD_KG
     ? {mg: kof * perM2, basis: `${rate(perM2)} mg/m² × ${num(kof, 3)} m²`}
@@ -241,23 +242,19 @@ function inj(name, route, d, conc, opts = {}) {
   };
 }
 
-function vincristin(kg, kof, species, perM2, perKg) {
-  return inj('Vincristin', 'IV', doseBasis(kg, kof, species, perM2, perKg), CONC.vincristin, {mgDigits: 3});
+// Hund und Katze gleich: unter 15 kg nach kg, ab 15 kg nach KOF
+function vincristin(kg, kof, perM2, perKg) {
+  return inj('Vincristin', 'IV', doseBasis(kg, kof, 'hund', perM2, perKg), CONC.vincristin, {mgDigits: 3});
 }
 
 function doxorubicin(kg, kof, species) {
-  if (species === 'katze') {
-    // Katze: 30 mg/m², aber maximal 1 mg/kg
-    const k = kof * 30;
-    return k > kg
-      ? inj('Doxorubicin', 'IV', {mg: kg, basis: `Limit 1 mg/kg × ${num(kg, 1)} kg`}, CONC.doxorubicin, {capped: true})
-      : inj('Doxorubicin', 'IV', byKOF(kof, 30), CONC.doxorubicin);
-  }
-  return inj('Doxorubicin', 'IV', doseBasis(kg, kof, species, 30, 1), CONC.doxorubicin);
+  // Hund: unter 15 kg 1 mg/kg, ab 15 kg 30 mg/m² · Katze: unter 15 kg 1 mg/kg, ab 15 kg 25 mg/m²
+  return inj('Doxorubicin', 'IV', doseBasis(kg, kof, 'hund', species === 'katze' ? 25 : 30, 1), CONC.doxorubicin);
 }
 
 function cyclophosphamid(kg, kof, species) {
-  const d = doseBasis(kg, kof, species, 250, 10);
+  // Hund: unter 15 kg 10 mg/kg, ab 15 kg 250 mg/m² · Katze: unter 15 kg 10 mg/kg, ab 15 kg 200 mg/m²
+  const d = doseBasis(kg, kof, 'hund', species === 'katze' ? 200 : 250, 10);
   const t = cycloTablets(d.mg);
   return {name: 'Cyclophosphamid', route: 'PO', dose: `${num(t.mg, t.mg % 1 ? 1 : 0)} mg`, unit: t.desc,
           basis: `Ziel ${num(d.mg, 1)} mg · ${d.basis}`, note: t.note};
@@ -279,13 +276,13 @@ function buildSections(kg, species) {
   const kof = getKOF(kg, species), dog = species === 'hund';
   const sections = [
     {title: 'B-Zell Lymphom · CHOP-Protokoll', drugs: [
-      vincristin(kg, kof, species, 0.7, 0.025),
+      vincristin(kg, kof, 0.7, 0.025),
       cyclophosphamid(kg, kof, species),
       doxorubicin(kg, kof, species),
     ]},
     // T-Zell-Protokoll nur beim Hund
     ...(dog ? [{title: 'T-Zell Lymphom · LOPP-Protokoll', drugs: [
-      vincristin(kg, kof, species, 0.5, 0.018),
+      vincristin(kg, kof, 0.5, 0.018),
       lomustin(kg, kof, species, 60),
     ]}] : []),
   ];
