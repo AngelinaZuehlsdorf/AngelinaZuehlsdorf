@@ -325,10 +325,8 @@ function vincristin(kg, kof, species) {
 function doxorubicin(kg, kof, species) {
   let d;
   if (species === 'katze') {
-    // Katze: 30 mg/m², aber maximal 1 mg/kg
-    const byKOF = kof * 30;
-    d = byKOF > kg ? {mg: kg, basis: `Limit 1 mg/kg × ${num(kg, 1)} kg`}
-                   : {mg: byKOF, basis: `30 mg/m² × ${num(kof, 3)} m²`};
+    // Katze: unter 15 kg 1 mg/kg, ab 15 kg 25 mg/m²
+    d = doseBasis(kg, kof, 'hund', 25, 1);
   } else {
     d = doseBasis(kg, kof, species, 30, 1);
   }
@@ -532,7 +530,7 @@ function buildEstimates(kg, species) {
   const list = [
     {id: 'vinc', title: 'Vincristin', tag: `IV · ${doseLabel(kg, species, 0.7, 0.025)}`, std: STD.vincristin,
      meds: [ivAnti, vincristin(kg, kof, species), poAnti]},
-    {id: 'doxo', title: 'Doxorubicin', tag: `IV · ${species === 'katze' ? '30 mg/m², max. 1 mg/kg' : doseLabel(kg, species, 30, 1)}`, std: STD.doxorubicin,
+    {id: 'doxo', title: 'Doxorubicin', tag: `IV · ${doseLabel(kg, 'hund', species === 'katze' ? 25 : 30, 1)}`, std: STD.doxorubicin,
      meds: [ivAnti, doxorubicin(kg, kof, species), poAnti]},
     {id: 'cyclo', title: 'Cyclophosphamid', tag: `PO · Tabletten · ${doseLabel(kg, species, 250, 10)}`, std: STD.tabletten,
      meds: [cyclophosphamid(kg, kof, species), poAnti]},
