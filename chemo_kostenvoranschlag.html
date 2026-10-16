@@ -370,7 +370,8 @@ function roundDownTablets(target, sizes, maxDev) {
 }
 
 function cyclophosphamid(kg, kof, species) {
-  const d = doseBasis(kg, kof, species, 250, 10);
+  // Hund: unter 15 kg 10 mg/kg, ab 15 kg 250 mg/m² · Katze: unter 15 kg 10 mg/kg, ab 15 kg 200 mg/m²
+  const d = doseBasis(kg, kof, 'hund', species === 'katze' ? 200 : 250, 10);
   const t = roundDownTablets(d.mg, CYCLO_TABS, MAX_DEVIATION);
   return {
     name: 'Cyclophosphamid Tabletten', route: 'PO', price: cents(t.price),
@@ -532,7 +533,7 @@ function buildEstimates(kg, species) {
      meds: [ivAnti, vincristin(kg, kof, species), poAnti]},
     {id: 'doxo', title: 'Doxorubicin', tag: `IV · ${doseLabel(kg, 'hund', species === 'katze' ? 25 : 30, 1)}`, std: STD.doxorubicin,
      meds: [ivAnti, doxorubicin(kg, kof, species), poAnti]},
-    {id: 'cyclo', title: 'Cyclophosphamid', tag: `PO · Tabletten · ${doseLabel(kg, species, 250, 10)}`, std: STD.tabletten,
+    {id: 'cyclo', title: 'Cyclophosphamid', tag: `PO · Tabletten · ${doseLabel(kg, 'hund', species === 'katze' ? 200 : 250, 10)}`, std: STD.tabletten,
      meds: [cyclophosphamid(kg, kof, species), poAnti]},
   ];
   if (species === 'katze') {
