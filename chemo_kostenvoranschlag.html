@@ -302,6 +302,12 @@ function cereniaIV(kg) {
 }
 
 // Dosis-Basis: Hund ≥ 15 kg nach KOF, sonst nach kg (Katze immer nach kg).
+// Dosierung als kurzer Text für den Zusatz, z. B. "0,7 mg/m²" oder "0,025 mg/kg"
+const doseNum = v => v.toLocaleString('de-DE', {maximumFractionDigits: 3});
+function doseLabel(kg, species, perM2, perKg) {
+  return species === 'hund' && kg >= KOF_THRESHOLD_KG ? `${doseNum(perM2)} mg/m²` : `${doseNum(perKg)} mg/kg`;
+}
+
 function doseBasis(kg, kof, species, perM2, perKg) {
   return species === 'hund' && kg >= KOF_THRESHOLD_KG
     ? {mg: kof * perM2, basis: `${num(perM2, 1)} mg/m² × ${num(kof, 3)} m²`}
@@ -524,11 +530,11 @@ function buildEstimates(kg, species) {
   const kof = getKOF(kg, species);
   const ivAnti = cereniaIV(kg), poAnti = cereniaPO(kg);
   const list = [
-    {id: 'vinc', title: 'Vincristin', tag: 'IV', std: STD.vincristin,
+    {id: 'vinc', title: 'Vincristin', tag: `IV · ${doseLabel(kg, species, 0.7, 0.025)}`, std: STD.vincristin,
      meds: [ivAnti, vincristin(kg, kof, species), poAnti]},
-    {id: 'doxo', title: 'Doxorubicin', tag: 'IV', std: STD.doxorubicin,
+    {id: 'doxo', title: 'Doxorubicin', tag: `IV · ${species === 'katze' ? '30 mg/m², max. 1 mg/kg' : doseLabel(kg, species, 30, 1)}`, std: STD.doxorubicin,
      meds: [ivAnti, doxorubicin(kg, kof, species), poAnti]},
-    {id: 'cyclo', title: 'Cyclophosphamid', tag: 'PO · Tabletten', std: STD.tabletten,
+    {id: 'cyclo', title: 'Cyclophosphamid', tag: `PO · Tabletten · ${doseLabel(kg, species, 250, 10)}`, std: STD.tabletten,
      meds: [cyclophosphamid(kg, kof, species), poAnti]},
   ];
   if (species === 'katze') {
@@ -548,16 +554,16 @@ function buildEstimates(kg, species) {
     const vinbDose = {mg: kof * VINB.mgPerM2, basis: `${VINB.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
     vinb = bottlePlan(VINB, vinbDose);
     vinb10 = bottlePlan(VINB10, vinbDose);
-    list.push({id: 'epi', title: 'Epirubicin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
+    list.push({id: 'epi', title: 'Epirubicin', tag: `IV · ${doseLabel(kg, species, 30, 1)} · 1. Gabe mit Flaschenanbruch`, std: STD.doxorubicin,
                meds: [ivAnti, bottleFirst(EPI, epi), poAnti]});
     const carboDose = {mg: kof * CARBO.mgPerM2, basis: `${CARBO.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
     carbo = multiBottlePlan(CARBO, carboDose);
-    list.push({id: 'carbo', title: 'Carboplatin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.carboplatin,
+    list.push({id: 'carbo', title: 'Carboplatin', tag: `IV · ${CARBO.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.carboplatin,
                meds: [ivAnti, ...multiBottleFirst(CARBO, carboDose), poAnti]});
     mito = bottlePlan(MITO, {mg: kof * MITO.mgPerM2, basis: `${MITO.mgPerM2} mg/m² × ${num(kof, 3)} m²`});
-    list.push({id: 'mito', title: 'Mitoxantron', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.doxorubicin,
+    list.push({id: 'mito', title: 'Mitoxantron', tag: `IV · ${MITO.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.doxorubicin,
                meds: [ivAnti, bottleFirst(MITO, mito), poAnti]});
-    list.push({id: 'vinb', title: 'Vinblastin', tag: 'IV · 1. Gabe mit Flaschenanbruch', std: STD.vincristin,
+    list.push({id: 'vinb', title: 'Vinblastin', tag: `IV · ${VINB.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.vincristin,
                meds: [ivAnti, bottleFirst(VINB, vinb), poAnti]});
   }
   for (const e of list) {
