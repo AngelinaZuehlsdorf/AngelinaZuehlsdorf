@@ -130,6 +130,12 @@ const CYCLO_TABS_MG = [50, 25, 15, 12.5];
 const LOMUSTIN_CAPS_MG = [40, 20, 10, 5];
 const MAX_DEVIATION = 0.05;                        // Cyclophosphamid: bis 5 % unter Ziel abrunden
 
+// Leukeran (Chlorambucil): 2-mg-Tabletten, nicht teilbar.
+// Hund 4 mg/m² täglich, Katze 20 mg/m² alle 2 Wochen.
+const LEUKERAN = {tabMg: 2, maxDev: 0.05,
+  hund:  {mgPerM2: 4,  schedule: 'täglich'},
+  katze: {mgPerM2: 20, schedule: 'alle 2 Wochen'}};
+
 const ASPARAGINASE = {iePerKg: 400, maxIE: 10000};   // Maximaldosis = 1 ganze Flasche (4 ml)
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -227,6 +233,22 @@ function lomustin(kg, kof, species, mgPerM2) {
   };
 }
 
+// Leukeran: auf ganze Tabletten runden (nächstliegend, bei Gleichstand weniger).
+// Weicht die Dosis mehr als 5 % vom Ziel ab → Rücksprache Tierarzt.
+function leukeran(kof, species) {
+  const cfg = LEUKERAN[species], target = kof * cfg.mgPerM2;
+  const tabs = Math.max(1, Math.round(target / LEUKERAN.tabMg - 1e-9));
+  const mg = tabs * LEUKERAN.tabMg, dev = (mg - target) / target;
+  return {
+    name: 'Leukeran', route: 'PO', dose: `${num(mg, 0)} mg`,
+    unit: `${tabs}× ${LEUKERAN.tabMg} mg ${cfg.schedule}`,
+    basis: `Ziel ${num(target, 1)} mg · ${cfg.mgPerM2} mg/m² × ${num(kof, 3)} m² ${cfg.schedule} · ` +
+           `gegeben ${num(mg / kof, 1)} mg/m² (${dev > 0 ? '+' : ''}${num(dev * 100, 0)} %)`,
+    note: Math.abs(dev) > LEUKERAN.maxDev + 1e-9
+      ? 'Mit 2-mg-Tabletten nicht genau dosierbar – Rücksprache Tierarzt' : '',
+  };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 //  WIRKSTOFFE
 // ════════════════════════════════════════════════════════════════════════════
@@ -290,6 +312,7 @@ function buildSections(kg, species) {
   const mono = [
     asparaginase(kg),
     bleomycin(kof),
+    leukeran(kof, species),
     lomustin(kg, kof, species, dog ? 70 : 40),
     ...(dog ? [
       inj('Carboplatin', 'IV', byKOF(kof, 300), CONC.carboplatin, {mlDigits: 1, mgDigits: 0}),
