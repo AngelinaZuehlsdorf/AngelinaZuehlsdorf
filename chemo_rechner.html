@@ -66,6 +66,7 @@ input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:
 .group-label{font-size:12px;font-weight:600;padding-bottom:4px;border-bottom:1px solid var(--border-strong)}
 .drug-info{flex:1;min-width:0}
 .drug-name{font-size:14px;font-weight:600}
+.drug-tag{font-size:12px;margin-top:1px}
 .drug-basis{font-size:11px;color:var(--muted);margin-top:2px}
 .drug-result{text-align:right;white-space:nowrap}
 .drug-dose{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -144,8 +145,9 @@ const MAX_DEVIATION = 0.05;                        // Cyclophosphamid: bis 5 % u
 // Leukeran (Chlorambucil): 2-mg-Tabletten, nicht teilbar; bei Bedarf 0,5-mg-Kapseln (Reformulierung).
 // Hund 4 mg/m² täglich, Katze 20 mg/m² alle 2 Wochen.
 const LEUKERAN = {tabMg: 2, capMg: 0.5, maxDev: 0.05,   // capMg: Reformulierung zu Kapseln
-  hund:  {mgPerM2: 4,  schedule: 'täglich'},
-  katze: {mgPerM2: 20, schedule: 'alle 2 Wochen'}};
+  hund:  {mgPerM2: 4,  schedule: 'täglich', tag: 'Monotherapie beim Lymphom'},
+  katze: {mgPerM2: 20, schedule: 'alle 2 Wochen'},
+  cyclo: {mgPerKg: 1.4, tag: 'Als Ersatz für Cyclophosphamid nach z. B. Zystitis'}};   // nur Hund
 
 const ASPARAGINASE = {iePerKg: 400, maxIE: 10000};   // Maximaldosis = 1 ganze Flasche (4 ml)
 
@@ -247,8 +249,7 @@ function lomustin(kg, kof, species, mgPerM2) {
 // Leukeran: zuerst 2-mg-Tabletten (nächstliegende Anzahl, bei Gleichstand weniger).
 // Weicht das mehr als 5 % vom Ziel ab → 0,5-mg-Kapseln (Reformulierung) mit Hinweis.
 // Passen auch die Kapseln nicht auf 5 % → zusätzlich Rücksprache Tierarzt.
-function leukeran(kof, species) {
-  const cfg = LEUKERAN[species], target = kof * cfg.mgPerM2;
+function leukeranRound(target) {
   const round = unit => {
     const n = Math.max(1, Math.round(target / unit - 1e-9)), mg = n * unit;
     return {n, unit, mg, dev: (mg - target) / target, ok: Math.abs(mg - target) / target <= LEUKERAN.maxDev + 1e-9};
@@ -260,13 +261,34 @@ function leukeran(kof, species) {
   const notes = [];
   if (useCap) notes.push(`Mit ${num(LEUKERAN.tabMg, 0)}-mg-Tabletten nicht genau dosierbar (${num(tab.mg, 0)} mg) – Reformulierung zu ${num(LEUKERAN.capMg, 1)}-mg-Kapseln nötig`);
   if (!r.ok) notes.push(`${useCap ? 'Auch mit Kapseln' : 'Auch mit Tabletten oder Kapseln'} nicht genau dosierbar – Rücksprache Tierarzt`);
+  const dev = `${r.dev > 0 ? '+' : ''}${num(r.dev * 100, 0)} %`;
+  return {r, dev, notes, form: useCap ? 'Kps.' : 'Tbl.'};
+}
+
+function leukeranRow({tag, target, schedule, basis, given}) {
+  const x = leukeranRound(target);
   return {
-    name: 'Leukeran', route: 'PO', dose: `${num(r.mg, r.mg % 1 ? 1 : 0)} mg`,
-    unit: `${r.n}× ${num(r.unit, r.unit % 1 ? 1 : 0)} mg ${useCap ? 'Kps.' : 'Tbl.'} ${cfg.schedule}`,
-    basis: `Ziel ${num(target, 2)} mg · ${cfg.mgPerM2} mg/m² × ${num(kof, 3)} m² ${cfg.schedule} · ` +
-           `gegeben ${num(r.mg / kof, 1)} mg/m² (${r.dev > 0 ? '+' : ''}${num(r.dev * 100, 0)} %)`,
-    note: notes,
+    name: 'Leukeran', route: 'PO', tag, dose: `${num(x.r.mg, x.r.mg % 1 ? 1 : 0)} mg`,
+    unit: `${x.r.n}× ${num(x.r.unit, x.r.unit % 1 ? 1 : 0)} mg ${x.form}${schedule ? ' ' + schedule : ''}`,
+    basis: `Ziel ${num(target, 2)} mg · ${basis} · gegeben ${given(x.r.mg)} (${x.dev})`,
+    note: x.notes,
   };
+}
+
+// Monotherapie: Hund 4 mg/m² täglich, Katze 20 mg/m² alle 2 Wochen
+function leukeran(kof, species) {
+  const cfg = LEUKERAN[species], target = kof * cfg.mgPerM2;
+  return leukeranRow({tag: cfg.tag, target, schedule: cfg.schedule,
+    basis: `${cfg.mgPerM2} mg/m² × ${num(kof, 3)} m² ${cfg.schedule}`,
+    given: mg => `${num(mg / kof, 1)} mg/m²`});
+}
+
+// Hund: 1,4 mg/kg als Ersatz für Cyclophosphamid
+function leukeranCyclo(kg) {
+  const c = LEUKERAN.cyclo, target = kg * c.mgPerKg;
+  return leukeranRow({tag: c.tag, target, schedule: '',
+    basis: `${rate(c.mgPerKg)} mg/kg × ${num(kg, 1)} kg`,
+    given: mg => `${num(mg / kg, 2)} mg/kg`});
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -349,6 +371,7 @@ function buildSections(kg, species) {
   const groups = [
     {title: 'Orale Chemotherapie', drugs: abc([
       leukeran(kof, species),
+      ...(dog ? [leukeranCyclo(kg)] : []),
       lomustin(kg, kof, species, dog ? 70 : 40),
     ])},
     {title: 'Injektion (IV / SC)', drugs: abc([
@@ -375,6 +398,7 @@ function drugRow(d) {
   return `<div class="drug-row">
     <div class="drug-info">
       <div class="drug-name">${d.name} <span class="badge badge-${route}">${d.route}</span>${d.capped ? '<span class="badge badge-cap">Max.</span>' : ''}</div>
+      ${d.tag ? `<div class="drug-tag">${d.tag}</div>` : ''}
       <div class="drug-basis">${d.basis}</div>
       ${[].concat(d.note || []).map(n => `<span class="note">${n}</span>`).join('')}
     </div>
