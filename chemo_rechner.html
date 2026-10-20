@@ -57,7 +57,9 @@ input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:
 .drug-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)}
 .drug-row:last-child{border-bottom:none}
 .group+.group{margin-top:14px}
-.premed{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.premed{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+@media (max-width:559px){.premed{grid-template-columns:1fr 1fr}.premed .card:nth-child(3){grid-column:1/-1}}
+.premed .drug-agent{font-size:11px;color:var(--muted)}
 .premed .card{margin-bottom:0;padding:.75rem 1rem;min-width:0}
 .premed .drug-dose{margin-top:6px}
 .premed .drug-basis{margin-top:4px}
@@ -121,6 +123,7 @@ input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:
 const CONC = {
   cerenia:      {v: 10,   unit: 'mg/ml'},
   prednisolon:  {v: 125 / 2, unit: 'mg/ml', prep: '125 mg/2 ml'},
+  diuren:       {v: 50,   unit: 'mg/ml'},
   vincristin:   {v: 1,    unit: 'mg/ml'},
   doxorubicin:  {v: 2,    unit: 'mg/ml'},
   epirubicin:   {v: 2,    unit: 'mg/ml'},
@@ -281,11 +284,19 @@ function inj(name, route, d, conc, opts = {}) {
   };
 }
 
-// Begleitmedikation vor der Chemo (Hund und Katze): je 1 mg/kg IV
+// Begleitmedikation vor der Chemo (Hund und Katze)
+//   Cerenia (Maropitant) 1 mg/kg IV, Prednisolon 1 mg/kg IV,
+//   Diuren (Furosemid) 4 mg/kg SC – nur zusätzlich bei Cyclophosphamid
 function premeds(kg) {
-  const perKg = (name, mgPerKg, conc) =>
-    inj(name, 'IV', {mg: kg * mgPerKg, basis: `${rate(mgPerKg)} mg/kg × ${num(kg, 1)} kg`}, conc);
-  return [perKg('Cerenia', 1, CONC.cerenia), perKg('Prednisolon', 1, CONC.prednisolon)];
+  const perKg = (name, agent, route, mgPerKg, conc, note = '') => ({
+    ...inj(name, route, {mg: kg * mgPerKg, basis: `${rate(mgPerKg)} mg/kg × ${num(kg, 1)} kg`}, conc),
+    agent, note,
+  });
+  return [
+    perKg('Cerenia', 'Maropitant', 'IV', 1, CONC.cerenia),
+    perKg('Prednisolon', 'Prednisolon', 'IV', 1, CONC.prednisolon),
+    perKg('Diuren', 'Furosemid', 'SC', 4, CONC.diuren, 'Nur zusätzlich bei Cyclophosphamid'),
+  ];
 }
 
 // Hund und Katze gleich: unter 15 kg nach kg, ab 15 kg nach KOF
@@ -376,10 +387,12 @@ function drugRow(d) {
 
 function premedCard(d) {
   return `<section class="card premed-card">
-    <div class="drug-name">${d.name} <span class="badge badge-iv">${d.route}</span></div>
+    <div class="drug-name">${d.name} <span class="badge badge-${d.route.toLowerCase()}">${d.route}</span></div>
+    <div class="drug-agent">${d.agent}</div>
     <div class="drug-dose">${d.dose}</div>
     <div class="drug-unit">${d.unit}</div>
     <div class="drug-basis">${d.basis}</div>
+    ${d.note ? `<span class="note">${d.note}</span>` : ''}
   </section>`;
 }
 
