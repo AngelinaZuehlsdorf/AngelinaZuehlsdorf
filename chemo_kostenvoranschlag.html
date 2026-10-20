@@ -85,24 +85,55 @@ input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:
   .toolbar,.species-toggle,.chev{display:none!important}
   .card{break-inside:avoid;border-color:#ccc}
 }
+
+/* Desktop: alles auf einen Blick – Patient oben in einer Zeile, Ergebnisse in 4 Spalten */
+@media (min-width:1100px){
+  .wrap{max-width:1480px;padding-block:14px 16px}
+  .top{display:flex;align-items:center;gap:24px;margin-bottom:12px}
+  h1{margin:0;font-size:19px;white-space:nowrap}
+  .patient{flex:1;display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px 20px;margin:0;padding:10px 16px}
+  .patient > .section-header{display:none}
+  .pfield .species-toggle{margin:0;width:200px}
+  .pfield input[type=number]{width:150px;height:40px}
+  .patient .kof{margin:0;gap:14px;height:40px;padding:0 14px}
+  .patient .warn{margin:0;align-self:center}
+  .cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start}
+  .single-h{display:none}
+  .col > .sub-h,.col > .group-h{margin:0 0 8px}
+  .col-prot > .group-h{font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0}
+  .chemo{margin-bottom:8px}
+  .chemo summary{padding:9px 12px;gap:8px}
+  .chemo-name b{font-size:14px}
+  .chemo-name small{display:block;font-size:11px;line-height:1.3}
+  .chemo-total{font-size:15px}
+  .chemo-body{padding:0 12px 10px}
+  .toolbar{margin:-4px 0 8px}
+  .disclaimer{margin-top:4px}
+}
 </style>
 </head>
 <body>
 <main class="wrap">
+  <header class="top">
   <h1>Chemotherapie – Kostenvoranschlag</h1>
 
-  <section class="card" aria-labelledby="patient-h">
+  <section class="card patient" aria-labelledby="patient-h">
     <p class="section-header" id="patient-h">Patient</p>
+    <div class="pfield">
     <span class="field-label" id="species-label">Spezies</span>
     <div class="species-toggle" role="group" aria-labelledby="species-label">
       <button type="button" class="species-btn" data-species="hund" aria-pressed="true"><i class="ti ti-dog" aria-hidden="true"></i> Hund</button>
       <button type="button" class="species-btn" data-species="katze" aria-pressed="false"><i class="ti ti-cat" aria-hidden="true"></i> Katze</button>
     </div>
+    </div>
+    <div class="pfield">
     <label class="field-label" for="weight">Körpergewicht (kg)</label>
     <input type="number" id="weight" inputmode="decimal" min="0.1" max="100" step="0.1" placeholder="z. B. 25,0" autocomplete="off">
+    </div>
     <div class="kof" id="kof" hidden><span>Körperoberfläche (KOF)</span><strong id="kof-value"></strong></div>
     <div class="warn" id="warn" hidden></div>
   </section>
+  </header>
 
   <div id="results" aria-live="polite"></div>
 
@@ -658,14 +689,14 @@ function render() {
 
   $('results').innerHTML =
     `<div class="toolbar"><button type="button" id="toggle-all">Alle aufklappen</button><button type="button" onclick="print()"><i class="ti ti-printer" aria-hidden="true"></i> Drucken</button></div>` +
-    `<p class="section-header group-h">Einzelsitzungen</p>` +
+    `<div class="cols"><p class="section-header group-h single-h">Einzelsitzungen</p>` +
     ROUTE_GROUPS.map(([label, ids]) => {
       const items = list.filter(e => ids.includes(e.id));
-      return items.length ? `<p class="sub-h">${label}</p>` +
-        items.map(e => cardHtml(e, block('Medikamente', e.meds, e.medSum) + block('Standardleistungen', e.stdRows, e.stdSum))).join('') : '';
+      return items.length ? `<section class="col"><p class="sub-h">${label}</p>` +
+        items.map(e => cardHtml(e, block('Medikamente', e.meds, e.medSum) + block('Standardleistungen', e.stdRows, e.stdSum))).join('') + '</section>' : '';
     }).join('') +
-    `<p class="section-header group-h">Protokolle – Gesamtkosten</p>` +
-    protocols.map(p => cardHtml(p, block('Sitzungen', p.rows, p.total))).join('') +
+    `<section class="col col-prot"><p class="section-header group-h">Protokolle – Gesamtkosten</p>` +
+    protocols.map(p => cardHtml(p, block('Sitzungen', p.rows, p.total))).join('') + '</section></div>' +
     `<p class="disclaimer">Einzelsitzungen inkl. Cerenia und Standardleistungen; Protokolle = Summe der Einzelsitzungen · ${species === 'hund' ? 'Hund' : 'Katze'}, ${num(kg, 1)} kg</p>`;
 
   const all = [...document.querySelectorAll('.chemo')];
