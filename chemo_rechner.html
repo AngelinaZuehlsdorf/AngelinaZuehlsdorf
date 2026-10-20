@@ -144,6 +144,9 @@ const MAX_DEVIATION = 0.05;                        // Cyclophosphamid: bis 5 % u
 
 // Leukeran (Chlorambucil): 2-mg-Tabletten, nicht teilbar; bei Bedarf 0,5-mg-Kapseln (Reformulierung).
 // Hund 4 mg/m² täglich, Katze 20 mg/m² alle 2 Wochen.
+// Methotrexat (nur Hund): 0,6 mg/kg PO, Tabletten 10 mg und 2,5 mg
+const METHOTREXAT = {mgPerKg: 0.6, tabsMg: [10, 2.5], maxDev: 0.05};
+
 const LEUKERAN = {tabMg: 2, capMg: 0.5, maxDev: 0.05,   // capMg: Reformulierung zu Kapseln
   hund:  {mgPerM2: 4,  schedule: 'täglich', tag: 'Monotherapie beim Lymphom'},
   katze: {mgPerM2: 20, schedule: 'alle 2 Wochen'},
@@ -284,6 +287,22 @@ function leukeran(kof, species) {
 }
 
 // Hund: 1,4 mg/kg als Ersatz für Cyclophosphamid
+// Methotrexat: auf die nächstliegende mögliche Dosis runden (bei Gleichstand weniger),
+// mit möglichst wenigen Tabletten. Mehr als 5 % Abweichung → Rücksprache Tierarzt.
+function methotrexat(kg) {
+  const c = METHOTREXAT, target = kg * c.mgPerKg, step = Math.min(...c.tabsMg);
+  const mg = Math.max(1, Math.round(target / step - 1e-9)) * step, dev = (mg - target) / target;
+  let rest = mg;
+  const parts = c.tabsMg.map(t => { const n = Math.floor(rest / t + 1e-9); rest -= n * t; return n ? `${n}× ${num(t, t % 1 ? 1 : 0)} mg` : ''; })
+    .filter(Boolean);
+  return {
+    name: 'Methotrexat', route: 'PO', dose: `${num(mg, mg % 1 ? 1 : 0)} mg`, unit: parts.join(' + '),
+    basis: `Ziel ${num(target, 2)} mg · ${rate(c.mgPerKg)} mg/kg × ${num(kg, 1)} kg · ` +
+           `gegeben ${num(mg / kg, 2)} mg/kg (${dev > 0 ? '+' : ''}${num(dev * 100, 0)} %)`,
+    note: Math.abs(dev) > c.maxDev + 1e-9 ? 'Mit 10-mg- und 2,5-mg-Tabletten nicht genau dosierbar – Rücksprache Tierarzt' : '',
+  };
+}
+
 function leukeranCyclo(kg) {
   const c = LEUKERAN.cyclo, target = kg * c.mgPerKg;
   return leukeranRow({tag: c.tag, target, schedule: '',
@@ -371,7 +390,7 @@ function buildSections(kg, species) {
   const groups = [
     {title: 'Orale Chemotherapie', drugs: abc([
       leukeran(kof, species),
-      ...(dog ? [leukeranCyclo(kg)] : []),
+      ...(dog ? [leukeranCyclo(kg), methotrexat(kg)] : []),
       lomustin(kg, kof, species, dog ? 70 : 40),
     ])},
     {title: 'Injektion (IV / SC)', drugs: abc([
