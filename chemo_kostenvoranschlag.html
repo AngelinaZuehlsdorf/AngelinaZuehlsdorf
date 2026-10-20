@@ -70,6 +70,7 @@ input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:
 .row .price{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
 .subtotal{display:flex;justify-content:space-between;padding-top:8px;margin-top:2px;border-top:1px solid var(--border-strong);font-size:13px;font-weight:600}
 .group-h{margin:18px 0 8px}
+.sub-h{font-size:13px;font-weight:600;color:var(--text);margin:14px 0 8px}
 .subtotal span:first-child{color:var(--muted);font-size:12px}
 .badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:600;vertical-align:middle}
 .badge-iv{background:var(--iv-bg);color:var(--iv-fg)}
@@ -618,6 +619,13 @@ const openState = new Set();   // aufgeklappte Karten über Neuberechnungen hinw
 const rowHtml = r => `<div class="row"><div>${r.name}${r.route ? `<span class="badge badge-${r.route.toLowerCase()}">${r.route}</span>` : ''}${r.desc ? `<div class="desc">${r.desc}</div>` : ''}${r.note ? `<div class="note">${r.note}</div>` : ''}</div><div class="price">${eur.format(r.price)}</div></div>`;
 const block = (title, rows, total) => `<p class="section-header">${title}</p>${rows.map(rowHtml).join('')}<div class="subtotal"><span>Zwischensumme</span><span>${eur.format(total)}</span></div>`;
 
+// Einzelsitzungen nach Verabreichungsart gruppiert (innerhalb der Gruppe alphabetisch)
+const ROUTE_GROUPS = [
+  ['Orale Chemotherapie', ['cyclo', 'lom70', 'lom60']],
+  ['Intravenöse Injektion', ['vinb', 'vinc']],
+  ['Intravenöse Infusion', ['carbo', 'doxo', 'epi', 'mito']],
+];
+
 function cardHtml(e, body) {
   const key = e.title + e.tag;
   return `<details class="card chemo" data-key="${key}"${openState.has(key) ? ' open' : ''}>
@@ -651,7 +659,11 @@ function render() {
   $('results').innerHTML =
     `<div class="toolbar"><button type="button" id="toggle-all">Alle aufklappen</button><button type="button" onclick="print()"><i class="ti ti-printer" aria-hidden="true"></i> Drucken</button></div>` +
     `<p class="section-header group-h">Einzelsitzungen</p>` +
-    list.map(e => cardHtml(e, block('Medikamente', e.meds, e.medSum) + block('Standardleistungen', e.stdRows, e.stdSum))).join('') +
+    ROUTE_GROUPS.map(([label, ids]) => {
+      const items = list.filter(e => ids.includes(e.id));
+      return items.length ? `<p class="sub-h">${label}</p>` +
+        items.map(e => cardHtml(e, block('Medikamente', e.meds, e.medSum) + block('Standardleistungen', e.stdRows, e.stdSum))).join('') : '';
+    }).join('') +
     `<p class="section-header group-h">Protokolle – Gesamtkosten</p>` +
     protocols.map(p => cardHtml(p, block('Sitzungen', p.rows, p.total))).join('') +
     `<p class="disclaimer">Einzelsitzungen inkl. Cerenia und Standardleistungen; Protokolle = Summe der Einzelsitzungen · ${species === 'hund' ? 'Hund' : 'Katze'}, ${num(kg, 1)} kg</p>`;
