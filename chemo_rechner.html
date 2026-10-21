@@ -342,16 +342,23 @@ function inj(name, route, d, conc, opts = {}) {
 }
 
 // Begleitmedikation vor der Chemo (Hund und Katze)
-//   Cerenia (Maropitant) 1 mg/kg IV, Prednisolon 1 mg/kg IV,
+//   Cerenia (Maropitant) 1 mg/kg IV,
+//   Prednisolon 1 mg/kg IV – nur bei Doxorubicin/Epirubicin, bei Bedarf bei Vincristin mit 2 mg/kg,
 //   Diuren (Furosemid) 4 mg/kg SC – nur Hund, nur zusätzlich bei Cyclophosphamid
+const PRED_VINC_MG_PER_KG = 2;   // Prednisolon bei Vincristin (bei Bedarf)
+
 function premeds(kg, species) {
   const perKg = (name, agent, route, mgPerKg, conc, note = '') => ({
     ...inj(name, route, {mg: kg * mgPerKg, basis: `${rate(mgPerKg)} mg/kg × ${num(kg, 1)} kg`}, conc),
     agent, note,
   });
+  const predVinc = kg * PRED_VINC_MG_PER_KG;
   return [
     perKg('Cerenia', 'Maropitant', 'IV', 1, CONC.cerenia),
-    perKg('Prednisolon', 'Prednisolon', 'IV', 1, CONC.prednisolon),
+    perKg('Prednisolon', 'Prednisolon', 'IV', 1, CONC.prednisolon, [
+      'Nur bei Doxorubicin und Epirubicin',
+      `Bei Bedarf bei Vincristin: ${rate(PRED_VINC_MG_PER_KG)} mg/kg = ${num(predVinc / CONC.prednisolon.v, 2)} ml (${num(predVinc, 2)} mg)`,
+    ]),
     ...(species === 'hund' ? [perKg('Diuren', 'Furosemid', 'SC', 4, CONC.diuren, 'Nur zusätzlich bei Cyclophosphamid')] : []),
   ];
 }
@@ -451,7 +458,7 @@ function premedCard(d) {
     <div class="drug-dose">${d.dose}</div>
     <div class="drug-unit">${d.unit}</div>
     <div class="drug-basis">${d.basis}</div>
-    ${d.note ? `<span class="note">${d.note}</span>` : ''}
+    ${[].concat(d.note || []).map(n => `<span class="note">${n}</span>`).join('')}
   </section>`;
 }
 
