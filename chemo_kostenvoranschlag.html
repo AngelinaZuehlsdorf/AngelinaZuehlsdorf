@@ -4,139 +4,154 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chemo-Kostenvoranschlag</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.42.0/dist/tabler-icons.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Atkinson+Hyperlegible+Mono:wght@400;600&display=swap">
 <style>
+/* Design wie der Dosierungsrechner: sticky Patientenleiste (Tierart + Gewicht), darunter Gruppen mit Akzentlinie; Akzentfarbe je Tierart. */
 :root{
-  --bg:#f6f6f4; --card:#fff; --soft:#f0efec; --text:#1d1d1b; --muted:#6b6a66;
-  --border:#e2e0db; --border-strong:#cfccc5;
-  --accent:#1f5fa8; --accent-soft:#e6f1fb;
-  --iv-bg:#e6f1fb; --iv-fg:#0c447c; --po-bg:#faeeda; --po-fg:#633806;
-  --warn-bg:#fdf3d8; --warn-fg:#6b4a00;
-  --radius:10px; --font:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --bg:#eef2f4; --surface:#ffffff; --fg:#15212b; --muted:#5b6b78; --line:#d6dee4;
+  --dog:#8a3e6b; --cat:#c2266f; --accent:var(--dog);
+  --accent-soft:color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --warn:#a15c00; --warn-bg:#fdf1dd;
+  --iv-bg:#e3eef8; --iv-fg:#1d4f7a; --po-bg:#fbefdc; --po-fg:#7a4a0e;
+  --f-body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+  --f-mono:"Atkinson Hyperlegible Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#191918; --card:#232321; --soft:#2c2c2a; --text:#ecebe7; --muted:#a3a19b;
-  --border:#3a3936; --border-strong:#4a4945;
-  --accent:#7db3ee; --accent-soft:#1d3047;
-  --iv-bg:#1d3047; --iv-fg:#a9cff5; --po-bg:#3d2f17; --po-fg:#f0cf94;
-  --warn-bg:#3d3214; --warn-fg:#f3d98a;
+  --bg:#0f1519; --surface:#172129; --fg:#e5ecf1; --muted:#93a3b0; --line:#2a3742;
+  --dog:#e09ac3; --cat:#ff7eb6; --warn:#f0b45a; --warn-bg:#33270f;
+  --iv-bg:#1b2f40; --iv-fg:#a9cff5; --po-bg:#3a2c14; --po-fg:#f0cf94;
+  color-scheme:dark;
 }}
 :root[data-theme="dark"]{
-  --bg:#191918; --card:#232321; --soft:#2c2c2a; --text:#ecebe7; --muted:#a3a19b;
-  --border:#3a3936; --border-strong:#4a4945;
-  --accent:#7db3ee; --accent-soft:#1d3047;
-  --iv-bg:#1d3047; --iv-fg:#a9cff5; --po-bg:#3d2f17; --po-fg:#f0cf94;
-  --warn-bg:#3d3214; --warn-fg:#f3d98a;
+  --bg:#0f1519; --surface:#172129; --fg:#e5ecf1; --muted:#93a3b0; --line:#2a3742;
+  --dog:#e09ac3; --cat:#ff7eb6; --warn:#f0b45a; --warn-bg:#33270f;
+  --iv-bg:#1b2f40; --iv-fg:#a9cff5; --po-bg:#3a2c14; --po-fg:#f0cf94;
+  color-scheme:dark;
 }
+body.cat{--accent:var(--cat)}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.4}
-.wrap{max-width:760px;margin:0 auto;padding:1.25rem 16px 2rem}
-h1{font-size:20px;font-weight:600;margin-bottom:14px}
-.section-header{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:12px}
-.field-label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+body{font-family:var(--f-body);font-size:15px;line-height:1.45;background:var(--bg);color:var(--fg)}
 
-.species-toggle{display:flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;margin-bottom:14px}
-.species-btn{flex:1;height:40px;border:none;background:transparent;cursor:pointer;font:inherit;font-size:15px;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:6px}
-.species-btn+.species-btn{border-left:1px solid var(--border-strong)}
-.species-btn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
-.species-btn:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Patientenleiste */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:12px 16px}
+.bar-inner{max-width:1480px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:end;gap:12px 20px}
+.brand{flex:1 1 220px;min-width:0}
+.brand h1{font-size:1.35rem;line-height:1.2;text-wrap:balance}
+.brand p{margin-top:2px;color:var(--muted);font-size:.85rem}
+.field-label{display:block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;font-weight:700}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;background:var(--bg)}
+.species-btn{font:inherit;font-weight:700;border:0;background:transparent;color:var(--muted);padding:7px 16px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.species-btn svg{width:18px;height:18px;fill:currentColor}
+.species-btn[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.species-btn:focus-visible,input:focus-visible,summary:focus-visible,.toolbar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.weight{display:flex;align-items:center;border:2px solid var(--accent);border-radius:10px;background:var(--surface);overflow:hidden}
+.weight input{width:6.5ch;border:0;background:transparent;color:var(--fg);font:600 1.35rem/1 var(--f-mono);padding:7px 4px 7px 12px;text-align:right;font-variant-numeric:tabular-nums}
+.weight input:focus{outline:none}
+.weight span{padding:0 12px 0 4px;font-weight:700;color:var(--muted)}
+.kof strong{display:block;font:600 1.35rem/1 var(--f-mono);color:var(--accent);padding:9px 0;font-variant-numeric:tabular-nums}
 
-input[type=number]{width:100%;height:42px;padding:0 12px;font:inherit;font-size:16px;color:var(--text);background:var(--card);border:1px solid var(--border-strong);border-radius:8px}
-.kof{display:flex;justify-content:space-between;align-items:center;background:var(--soft);border-radius:8px;padding:10px 14px;margin-top:12px}
-.kof span:first-child{font-size:13px;color:var(--muted)}
-.kof strong{font-size:18px;font-weight:600}
-.warn{background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;padding:8px 12px;font-size:12px;margin-top:10px}
+/* Inhalt */
+.wrap{max-width:1480px;margin:0 auto;padding:14px 16px 32px}
+.warn{margin:0 0 14px;padding:10px 14px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-weight:700}
+.placeholder{text-align:center;padding:2.5rem 1rem;color:var(--muted)}
+.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px}
+.toolbar button{font:inherit;font-size:.8rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer}
+.toolbar button:hover{color:var(--accent);background:var(--accent-soft)}
 
-.placeholder{text-align:center;padding:2.5rem 1rem;color:var(--muted);font-size:14px}
-.placeholder i{font-size:32px;display:block;margin-bottom:8px}
+.section-header{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+/* Gruppenköpfe wie im Dosierungsrechner */
+.group-h,.sub-h{display:block;color:var(--accent);border-bottom:2px solid var(--accent);padding:4px 2px 6px;margin:18px 0 8px;font:700 .8rem var(--f-body);letter-spacing:.08em;text-transform:uppercase}
+.single-h{color:var(--muted);border-bottom-color:var(--line)}
 
-.chemo{padding:0;overflow:hidden}
-.chemo summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 1.25rem}
+.chemo{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:6px;overflow:hidden}
+.chemo[open]{border-color:var(--accent)}
+.chemo summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px}
 .chemo summary::-webkit-details-marker{display:none}
-.chemo summary .chev{color:var(--muted);transition:transform .15s}
+.chemo summary .chev{flex:none;width:16px;height:16px;color:var(--muted);transition:transform .15s}
+.chemo summary:hover .chev{color:var(--accent)}
 .chemo[open] summary .chev{transform:rotate(90deg)}
 .chemo-name{flex:1;min-width:0}
-.chemo-name b{font-size:15px;font-weight:600;display:block}
-.chemo-name small{font-size:12px;color:var(--muted)}
-.chemo-total{font-size:18px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
-.chemo-body{padding:0 1.25rem 1rem;border-top:1px solid var(--border)}
-.chemo-body .section-header{margin-top:14px}
+.chemo-name b{display:block;font-size:1rem;line-height:1.2}
+.chemo-name small{display:block;color:var(--muted);font-size:.78rem;line-height:1.3;margin-top:1px}
+.chemo-total{font:600 1.2rem/1.1 var(--f-mono);color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.chemo-body{padding:0 12px 10px;border-top:1px solid var(--line)}
+.chemo-body .section-header{margin-top:12px}
 
-.row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+.row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.86rem}
 .row:last-child{border-bottom:none}
-.row .desc{font-size:11px;color:var(--muted);margin-top:2px}
-.note{display:block;width:fit-content;max-width:100%;font-size:11px;font-weight:600;background:var(--warn-bg);color:var(--warn-fg);border-radius:4px;padding:2px 6px;margin-top:4px}
-.row .price{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
-.subtotal{display:flex;justify-content:space-between;padding-top:8px;margin-top:2px;border-top:1px solid var(--border-strong);font-size:13px;font-weight:600}
-.group-h{margin:18px 0 8px}
-.sub-h{font-size:13px;font-weight:600;color:var(--text);margin:14px 0 8px}
-.subtotal span:first-child{color:var(--muted);font-size:12px}
-.badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:600;vertical-align:middle}
+.row .desc{font-size:.74rem;color:var(--muted);margin-top:2px}
+.row .price{white-space:nowrap;font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.subtotal{display:flex;justify-content:space-between;padding-top:7px;margin-top:2px;border-top:2px solid var(--line);font-size:.86rem;font-weight:700}
+.subtotal span:first-child{color:var(--muted);font-size:.78rem}
+.subtotal span:last-child{font-family:var(--f-mono)}
+.note{display:block;width:fit-content;max-width:100%;font-size:.72rem;font-weight:700;background:var(--warn-bg);color:var(--warn);border-radius:5px;padding:1px 6px;margin-top:4px}
+.badge{display:inline-block;font-size:.68rem;padding:1px 6px;border-radius:5px;margin-left:6px;font-weight:700;vertical-align:middle}
 .badge-iv{background:var(--iv-bg);color:var(--iv-fg)}
 .badge-po{background:var(--po-bg);color:var(--po-fg)}
+.disclaimer{font-size:.8rem;color:var(--muted);margin-top:12px;max-width:75ch}
 
-.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px}
-.toolbar button{font:inherit;font-size:12px;color:var(--muted);background:transparent;border:1px solid var(--border-strong);border-radius:6px;padding:4px 10px;cursor:pointer}
-.disclaimer{font-size:11px;color:var(--muted);text-align:center;margin-top:8px}
-
+@media (max-width:720px){
+  .brand p{display:none}
+  .brand h1{font-size:1.1rem}
+  .bar{padding-block:8px}
+  .bar-inner{gap:8px 14px}
+  .kof strong{font-size:1.1rem;padding:6px 0}
+}
 @media print{
   body{background:#fff}
-  .toolbar,.species-toggle,.chev{display:none!important}
-  .card{break-inside:avoid;border-color:#ccc}
+  .bar{position:static}
+  .toolbar,.chev{display:none!important}
+  .chemo{break-inside:avoid}
 }
-
-/* Desktop: alles auf einen Blick – Patient oben in einer Zeile, Ergebnisse in 4 Spalten */
+/* Desktop: alles auf einen Blick – Ergebnisse in 4 Spalten */
 @media (min-width:1100px){
-  .wrap{max-width:1480px;padding-block:14px 16px}
-  .top{display:flex;align-items:center;gap:24px;margin-bottom:12px}
-  h1{margin:0;font-size:19px;white-space:nowrap}
-  .patient{flex:1;display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px 20px;margin:0;padding:10px 16px}
-  .patient > .section-header{display:none}
-  .pfield .species-toggle{margin:0;width:200px}
-  .pfield input[type=number]{width:150px;height:40px}
-  .patient .kof{margin:0;gap:14px;height:40px;padding:0 14px}
-  .patient .warn{margin:0;align-self:center}
-  .cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start}
+  .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,1.35fr);gap:16px;align-items:start}
+  .chemo-total{font-size:1.05rem}
+  .chemo summary{padding:8px 10px}
+  .wrap{padding-top:10px}
   .single-h{display:none}
-  .col > .sub-h,.col > .group-h{margin:0 0 8px}
-  .col-prot > .group-h{font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0}
-  .chemo{margin-bottom:8px}
-  .chemo summary{padding:9px 12px;gap:8px}
-  .chemo-name b{font-size:14px}
-  .chemo-name small{display:block;font-size:11px;line-height:1.3}
-  .chemo-total{font-size:15px}
-  .chemo-body{padding:0 12px 10px}
-  .toolbar{margin:-4px 0 8px}
-  .disclaimer{margin-top:4px}
+  .col > .sub-h,.col > .group-h{margin-top:0}
+  .toolbar{margin:-6px 0 6px}
 }
+@media (prefers-reduced-motion:reduce){.chemo summary .chev{transition:none}}
 </style>
 </head>
 <body>
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand">
+      <h1>Kostenvoranschlag Chemotherapie</h1>
+      <p>Kosten pro Sitzung und Protokoll für Hund und Katze</p>
+    </div>
+    <div>
+      <span class="field-label" id="species-label">Tierart</span>
+      <div class="seg" role="group" aria-labelledby="species-label">
+        <button type="button" class="species-btn" data-species="hund" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm4-3a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm7 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm4 3a2 2 0 1 1 0-4 2 2 0 0 1 0 4ZM12 11c3 0 6 4.5 6 7a3 3 0 0 1-3 3c-1.2 0-2-.6-3-.6s-1.8.6-3 .6a3 3 0 0 1-3-3c0-2.5 3-7 6-7Z"/></svg>
+          Hund
+        </button>
+        <button type="button" class="species-btn" data-species="katze" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l3.2 4.2A8 8 0 0 1 12 6.5c1.4 0 2.7.3 3.8.7L19 3l.8 6.4A7.4 7.4 0 0 1 20 11c0 4.8-3.6 9-8 9s-8-4.2-8-9c0-.5 0-1.1.2-1.6L5 3Zm4 9a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm6 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg>
+          Katze
+        </button>
+      </div>
+    </div>
+    <div>
+      <label class="field-label" for="weight">Körpergewicht</label>
+      <div class="weight"><input id="weight" inputmode="decimal" autocomplete="off" placeholder="25,0"><span>kg</span></div>
+    </div>
+    <div class="kof" id="kof" hidden>
+      <span class="field-label">Körperoberfläche</span>
+      <strong id="kof-value"></strong>
+    </div>
+  </div>
+</header>
+
 <main class="wrap">
-  <header class="top">
-  <h1>Chemotherapie – Kostenvoranschlag</h1>
-
-  <section class="card patient" aria-labelledby="patient-h">
-    <p class="section-header" id="patient-h">Patient</p>
-    <div class="pfield">
-    <span class="field-label" id="species-label">Spezies</span>
-    <div class="species-toggle" role="group" aria-labelledby="species-label">
-      <button type="button" class="species-btn" data-species="hund" aria-pressed="true"><i class="ti ti-dog" aria-hidden="true"></i> Hund</button>
-      <button type="button" class="species-btn" data-species="katze" aria-pressed="false"><i class="ti ti-cat" aria-hidden="true"></i> Katze</button>
-    </div>
-    </div>
-    <div class="pfield">
-    <label class="field-label" for="weight">Körpergewicht (kg)</label>
-    <input type="number" id="weight" inputmode="decimal" min="0.1" max="100" step="0.1" placeholder="z. B. 25,0" autocomplete="off">
-    </div>
-    <div class="kof" id="kof" hidden><span>Körperoberfläche (KOF)</span><strong id="kof-value"></strong></div>
-    <div class="warn" id="warn" hidden></div>
-  </section>
-  </header>
-
+  <p class="warn" id="warn" hidden></p>
   <div id="results" aria-live="polite"></div>
-
   <p class="disclaimer">Alle Angaben ohne Gewähr. Dosierungen immer durch Tierarzt überprüfen.</p>
 </main>
 
@@ -658,7 +673,7 @@ const ROUTE_GROUPS = [
 function cardHtml(e, body) {
   const key = e.title + e.tag;
   return `<details class="card chemo" data-key="${key}"${openState.has(key) ? ' open' : ''}>
-        <summary><i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+        <summary><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="chemo-name"><b>${e.title}</b><small>${e.tag}</small>${e.individual ? '<span class="note">Dosierung individuell durch Tierarzt – Preis vorläufig</span>' : ''}</span>
           <span class="chemo-total">${eur.format(e.total)}</span></summary>
         <div class="chemo-body">
@@ -673,7 +688,7 @@ function render() {
 
   if (!(kg > 0)) {
     $('kof').hidden = true;
-    $('results').innerHTML = `<div class="placeholder"><i class="ti ti-calculator" aria-hidden="true"></i>Spezies wählen und Gewicht eingeben</div>`;
+    $('results').innerHTML = `<div class="placeholder">Spezies wählen und Gewicht eingeben</div>`;
     return;
   }
   if ((species === 'katze' && kg > 15) || kg > 100) {
@@ -686,7 +701,7 @@ function render() {
   $('kof').hidden = false;
 
   $('results').innerHTML =
-    `<div class="toolbar"><button type="button" id="toggle-all">Alle aufklappen</button><button type="button" onclick="print()"><i class="ti ti-printer" aria-hidden="true"></i> Drucken</button></div>` +
+    `<div class="toolbar"><button type="button" id="toggle-all">Alle aufklappen</button><button type="button" onclick="print()">Drucken</button></div>` +
     `<div class="cols"><p class="section-header group-h single-h">Einzelsitzungen</p>` +
     ROUTE_GROUPS.map(([label, ids]) => {
       const items = list.filter(e => ids.includes(e.id));
@@ -710,7 +725,8 @@ function render() {
 document.querySelectorAll('.species-btn').forEach(btn => btn.addEventListener('click', () => {
   species = btn.dataset.species;
   document.querySelectorAll('.species-btn').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
-  $('weight').placeholder = species === 'hund' ? 'z. B. 25,0' : 'z. B. 4,5';
+  document.body.classList.toggle('cat', species === 'katze');
+  $('weight').placeholder = species === 'hund' ? '25,0' : '4,5';
   render();
 }));
 $('weight').addEventListener('input', render);
