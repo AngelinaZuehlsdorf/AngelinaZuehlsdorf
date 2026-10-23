@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dosierungsrechner Hund &amp; Katze</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Atkinson+Hyperlegible+Mono:wght@400;600&display=swap">
+<style>
+html, body { margin: 0; }
+[hidden] { display: none !important; }
+/* Layout: sticky patient bar (Tierart + Gewicht) über einer alphabetischen Medikamentenliste; jede Zeile endet im Injektionsvolumen. */
+:root {
+  --bg: #eef2f4;
+  --surface: #ffffff;
+  --fg: #15212b;
+  --muted: #5b6b78;
+  --line: #d6dee4;
+  --dog: #8a3e6b;
+  --cat: #c2266f;
+  --accent: var(--dog);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --ok: #1f7a4d;
+  --warn: #a15c00;
+  --warn-bg: #fdf1dd;
+  --bad: #b3261e;
+  --bad-bg: #fbe4e2;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1519; --surface: #172129; --fg: #e5ecf1; --muted: #93a3b0; --line: #2a3742;
+    --dog: #e09ac3; --cat: #ff7eb6;
+    --ok: #6fcf9c; --warn: #f0b45a; --warn-bg: #33270f; --bad: #ff8a80; --bad-bg: #3a1b19;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1519; --surface: #172129; --fg: #e5ecf1; --muted: #93a3b0; --line: #2a3742;
+  --dog: #e09ac3; --cat: #ff7eb6;
+  --ok: #6fcf9c; --warn: #f0b45a; --warn-bg: #33270f; --bad: #ff8a80; --bad-bg: #3a1b19;
+  color-scheme: dark;
+}
+body.cat { --accent: var(--cat); }
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--f-body); font-size: 15px; line-height: 1.45;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+}
+.bar-inner { max-width: 1180px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: end; gap: 12px 20px; }
+.brand { flex: 1 1 220px; min-width: 0; }
+.brand h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; text-wrap: balance; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: .85rem; }
+
+.field-label { display: block; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; padding: 3px; background: var(--bg); }
+.seg button {
+  font: inherit; font-weight: 700; border: 0; background: transparent; color: var(--muted);
+  padding: 7px 16px; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+}
+.seg button svg { width: 18px; height: 18px; fill: currentColor; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.seg button:focus-visible, input:focus-visible, select:focus-visible, .step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.weight { display: flex; align-items: center; border: 2px solid var(--accent); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.weight input {
+  width: 6.5ch; border: 0; background: transparent; color: var(--fg);
+  font: 600 1.35rem/1 var(--f-mono); padding: 7px 4px 7px 12px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.weight input:focus { outline: none; }
+.weight span { padding: 0 12px 0 4px; font-weight: 700; color: var(--muted); }
+
+.search input {
+  font: inherit; width: 100%; max-width: 220px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 12px; background: var(--bg); color: var(--fg);
+}
+
+main {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px 32px;
+}
+.alert { margin: 0 0 16px; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--warn); font-weight: 700; }
+
+.list { display: grid; gap: 14px; }
+.group { display: grid; gap: 6px; }
+.glist { display: grid; gap: 6px; }
+.group.shut .glist { display: none; }
+.group.searching .glist { display: grid; }
+.ghead { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-bottom: 2px solid var(--accent); background: transparent; color: var(--accent); padding: 4px 2px 6px; font: 700 .8rem var(--f-body); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; text-align: left; }
+.ghead svg { width: 14px; height: 14px; fill: currentColor; transform: rotate(90deg); flex: none; }
+.group.shut .ghead svg { transform: none; }
+.ghead:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gcount { margin-left: auto; color: var(--muted); font-family: var(--f-mono); letter-spacing: 0; font-weight: 600; }
+
+/* Kompakte Zeile: Aufklappen | Name | Präparat | Dosis | Ergebnis; darunter optional Warnstreifen und Details */
+.row {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  display: grid; grid-template-columns: 28px minmax(190px, 1.2fr) minmax(0, 1.4fr) 172px minmax(150px, 1fr);
+  grid-template-areas: "tog name form dose res" "det det det det det";
+  column-gap: 14px; row-gap: 0; align-items: center; padding: 8px 12px; min-width: 0;
+}
+.row[hidden] { display: none; }
+.row.open { border-color: var(--accent); }
+.tog { grid-area: tog; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.tog:hover { background: var(--accent-soft); color: var(--accent); }
+.tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tog svg { width: 16px; height: 16px; fill: currentColor; }
+.row.open .tog svg { transform: rotate(90deg); }
+.name { grid-area: name; min-width: 0; cursor: pointer; }
+.name h2 { margin: 0; font-size: 1rem; line-height: 1.2; }
+.agent { display: block; color: var(--muted); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.form { grid-area: form; min-width: 0; }
+.form select {
+  font: inherit; font-size: .88rem; width: 100%; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg);
+}
+.form-text { font-size: .88rem; color: var(--muted); }
+.dosecell { grid-area: dose; display: grid; gap: 2px; min-width: 0; }
+.span { font-size: .74rem; color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dose { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--bg); width: max-content; max-width: 100%; }
+.dose.locked { align-items: center; gap: 4px; padding: 5px 8px; background: transparent; border-style: dashed; }
+.dose.locked svg { width: 12px; height: 12px; fill: var(--muted); flex: none; }
+.dose.locked .unit { padding: 0; }
+.fixed-val { font: 600 .95rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.dose input { width: 5ch; border: 0; background: transparent; color: var(--fg); font: 600 .95rem var(--f-mono); text-align: right; padding: 5px 3px; font-variant-numeric: tabular-nums; }
+.dose .unit { align-self: center; padding: 0 6px 0 3px; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.step { border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--fg); font: 700 .95rem var(--f-mono); width: 28px; cursor: pointer; }
+.step:hover { background: var(--accent-soft); }
+
+.res { grid-area: res; min-width: 0; display: grid; gap: 1px; justify-items: start; }
+.big { display: flex; align-items: baseline; gap: 4px; }
+.big .num { font: 600 1.4rem/1.1 var(--f-mono); font-variant-numeric: tabular-nums; color: var(--accent); }
+.big .num.txt { font-size: 1.05rem; font-family: var(--f-body); }
+.big .u { font-weight: 700; font-size: .9rem; color: var(--accent); }
+.sub { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status { font-size: .72rem; font-weight: 700; padding: 1px 6px; border-radius: 5px; width: max-content; max-width: 100%; }
+.status.warn { color: var(--warn); background: var(--warn-bg); }
+.status.bad { color: var(--bad); background: var(--bad-bg); }
+
+.nl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; background: var(--bad-bg); color: var(--bad); border: 1.5px solid var(--bad); border-radius: 6px; padding: 1px 6px; font-size: .74rem; font-weight: 700; white-space: nowrap; text-transform: uppercase; letter-spacing: .02em; }
+.chip svg { width: 13px; height: 13px; fill: currentColor; flex: none; }
+.danger { display: flex; gap: 8px; align-items: center; background: var(--bad-bg); color: var(--bad); border: 2px solid var(--bad); border-radius: 8px; padding: 5px 10px; font-weight: 700; font-size: .9rem; }
+.danger svg { flex: none; width: 18px; height: 18px; fill: currentColor; }
+
+.det { grid-area: det; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 8px; font-size: .88rem; }
+.det[hidden] { display: none; }
+.range { color: var(--muted); }
+.range button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.tag { font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; border: 1px solid var(--line); color: var(--muted); padding: 1px 7px; border-radius: 999px; width: max-content; }
+.meta { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; }
+.meta dt { color: var(--muted); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; padding-top: 2px; }
+.meta dd { margin: 0; }
+.notes { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 2px; }
+.notes li.warn { color: var(--warn); font-weight: 700; }
+.empty { color: var(--muted); padding: 30px 0; text-align: center; }
+
+footer { margin-top: 28px; font-size: .82rem; color: var(--muted); max-width: 75ch; display: grid; gap: 6px; }
+footer strong { color: var(--fg); }
+
+@media (max-width: 720px) {
+  .row { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "tog name res" "form form dose" "det det det"; column-gap: 10px; }
+  .brand p, .search .field-label { display: none; }
+  .brand h1 { font-size: 1.1rem; }
+  .bar { padding-block: 8px; }
+  .bar-inner { gap: 8px 14px; }
+  .search input { padding: 6px 10px; }
+  .form, .dosecell { margin-top: 8px; }
+  .res { justify-items: end; text-align: right; }
+  .search { flex: 1 1 100%; }
+  .search input { max-width: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand">
+      <h1>Dosierungsrechner</h1>
+      <p>Injektionsmengen für Hund und Katze</p>
+    </div>
+    <div>
+      <span class="field-label" id="lbl-species">Tierart</span>
+      <div class="seg" role="group" aria-labelledby="lbl-species">
+        <button type="button" id="sp-dog" data-sp="dog" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm4-3a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm7 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm4 3a2 2 0 1 1 0-4 2 2 0 0 1 0 4ZM12 11c3 0 6 4.5 6 7a3 3 0 0 1-3 3c-1.2 0-2-.6-3-.6s-1.8.6-3 .6a3 3 0 0 1-3-3c0-2.5 3-7 6-7Z"/></svg>
+          Hund
+        </button>
+        <button type="button" id="sp-cat" data-sp="cat" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l3.2 4.2A8 8 0 0 1 12 6.5c1.4 0 2.7.3 3.8.7L19 3l.8 6.4A7.4 7.4 0 0 1 20 11c0 4.8-3.6 9-8 9s-8-4.2-8-9c0-.5 0-1.1.2-1.6L5 3Zm4 9a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm6 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg>
+          Katze
+        </button>
+      </div>
+    </div>
+    <div>
+      <label class="field-label" for="weight">Körpergewicht</label>
+      <div class="weight"><input id="weight" inputmode="decimal" autocomplete="off" value="10"><span>kg</span></div>
+    </div>
+    <div class="search">
+      <label class="field-label" for="q">Suche</label>
+      <input id="q" type="search" placeholder="Name oder Wirkstoff" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<main>
+  <p class="alert" id="weight-alert" hidden></p>
+  <div class="list" id="list"></div>
+  <p class="empty" id="empty" hidden>Kein Medikament passt zur Suche.</p>
+  <footer>
+    <p><strong>Nur als Rechenhilfe.</strong> Die Dosierungen stammen aus Fachinformationen (SPC) der Tierarzneimittel und aus gängiger veterinärmedizinischer Literatur. Vor jeder Anwendung Konzentration auf dem Etikett, aktuelle Fachinformation und den klinischen Zustand des Patienten (Niere, Leber, Hydratation) prüfen. Die Verantwortung für die Dosis liegt bei der behandelnden Tierärztin bzw. dem behandelnden Tierarzt.</p>
+    <p>„Umwidmung“ bedeutet: für diese Tierart nicht zugelassen (Humanpräparat oder andere Tierart), Anwendung nach VO (EU) 2019/6, Art. 112 ff.</p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // Dosierungsdaten. Pro Präparat (Form) und Tierart: min/max/def in doseUnit, optional upper (nur schwere Fälle) und cap (Höchstmenge pro Tier).
+  // Gleiche Dosierung für Hund und Katze
+  function both(d) { return { dog: d, cat: Object.assign({}, d) }; }
+
+  var DRUGS = [
+    {
+      id: "aranesp", locked: true, name: "Aranesp", agent: "Darbepoetin alfa", cls: "EPO-Analogon", tag: "Humanpräparat",
+      forms: [
+        { label: "Fertigspritze 25 µg/ml", conc: 25, kind: "inj", mass: "µg" }
+      ].map(function (f) {
+        f.dose = {
+          dog: { min: 0.5, max: 0.5, def: 0.5, unit: "µg/kg", route: "SC", interval: "1× wöchentlich bis Ziel-Hkt erreicht, danach alle 2–3 Wochen" },
+          cat: { min: 1, max: 1, def: 1, unit: "µg/kg", route: "SC", interval: "1× wöchentlich bis Ziel-Hkt erreicht, danach alle 2–3 Wochen" }
+        };
+        return f;
+      }),
+      notes: {
+        all: ["Parallel Eisen ergänzen (siehe Eisen).", "Hkt wöchentlich und Blutdruck regelmäßig kontrollieren.", "Umwidmung (Humanpräparat)."]
+      }
+    },
+    {
+      id: "cerenia", locked: true, name: "Cerenia / Prevomax", agent: "Maropitant", cls: "Antiemetikum (NK1-Antagonist)",
+      forms: [
+        { label: "Prevomax 10 mg/ml", conc: 10, kind: "inj", mass: "mg", dose: null },
+        { label: "Cerenia 10 mg/ml", conc: 10, kind: "inj", mass: "mg", dose: {
+          dog: { min: 1, max: 1, def: 1, unit: "mg/kg", route: "SC oder IV (langsam)", interval: "1× täglich, bis zu 5 Tage", alert: "IV nur LANGSAM als Bolus geben!" },
+          cat: { min: 1, max: 1, def: 1, unit: "mg/kg", route: "SC oder IV (langsam)", interval: "1× täglich, bis zu 5 Tage", alert: "IV nur LANGSAM als Bolus geben!" } } }
+      ].map(function (f, i, all) { if (!f.dose) f.dose = all[1].dose; return f; }),
+      notes: {
+        all: ["Gekühlte Lösung reduziert den Injektionsschmerz.", "Nicht bei Verdacht auf gastrointestinale Obstruktion oder Fremdkörper."],
+        dog: ["Injektion ab 8 Wochen Lebensalter."],
+        cat: ["Injektion ab 16 Wochen Lebensalter."]
+      }
+    },
+    {
+      id: "depomedrate", name: "Depo-Medrate", agent: "Methylprednisolonacetat", cls: "Glukokortikoid (Depot)", tag: "Humanpräparat",
+      forms: [
+        { label: "Injektionssuspension 40 mg/ml", conc: 40, kind: "inj", mass: "mg", dose: {
+          dog: { min: 3, max: 3, def: 3, unit: "mg/kg", route: "IM (tief), nicht IV", interval: "Einmalig; Wiederholung frühestens nach 1–3 Wochen", alert: "Depo-Medrate NICHT intravenös geben! Nur tief IM." },
+          cat: { min: 5, max: 5, def: 5, unit: "mg/kg", route: "IM oder SC, nicht IV", interval: "Einmalig; Wiederholung frühestens nach 2–4 Wochen", alert: "Depo-Medrate NICHT intravenös geben! Nur IM oder SC." } } }
+      ],
+      notes: {
+        all: ["Vor Gebrauch gut schütteln.", "Nicht mit NSAIDs (z. B. Rimadyl) kombinieren.", "Umwidmung (Humanpräparat)."],
+        cat: ["Risiko für Diabetes mellitus und Herzinsuffizienz bei Katzen beachten."]
+      }
+    },
+    {
+      id: "diuren", name: "Diuren", agent: "Furosemid", cls: "Schleifendiuretikum",
+      forms: [
+        { label: "Injektionslösung 50 mg/ml", conc: 50, kind: "inj", mass: "mg", dose: {
+          dog: { min: 1, max: 2, upper: 4, def: 2, unit: "mg/kg", route: "IV oder IM", interval: "1–2× täglich" },
+          cat: { min: 1, max: 2, upper: 4, def: 1, unit: "mg/kg", route: "IV oder IM", interval: "1–2× täglich" } } }
+      ],
+      notes: {
+        all: ["Laut Fachinformation darf die Einzeldosis in schweren Fällen verdoppelt werden (bis 4 mg/kg).", "Elektrolyte (K⁺), Nierenwerte und Hydratation kontrollieren.", "Metamizol kann die diuretische Wirkung abschwächen."]
+      }
+    },
+    {
+      id: "eisen", name: "Eisen", agent: "Eisen(III)-Dextran", cls: "Eisenpräparat",
+      forms: [
+        { label: "Belfer 100 mg/ml", conc: 100, kind: "inj", mass: "mg" }
+      ].map(function (f) {
+        f.dose = {
+          dog: { min: 10, max: 20, def: 10, unit: "mg/kg", cap: 300, route: "IM (tief), 1:1 mit NaCl 0,9 % verdünnt", interval: "Einmalig; bei Bedarf alle 3–4 Wochen wiederholen", dilute: true, alert: "Eisen 1:1 mit NaCl 0,9 % verdünnen! Unverdünnt können Nekrosen entstehen." },
+          cat: { min: 50, max: 50, def: 50, unit: "mg/Tier", fixed: true, route: "IM (tief), 1:1 mit NaCl 0,9 % verdünnt", interval: "Einmalig; bei Bedarf alle 3–4 Wochen wiederholen", dilute: true, alert: "Eisen 1:1 mit NaCl 0,9 % verdünnen! Unverdünnt können Nekrosen entstehen." }
+        };
+        return f;
+      }),
+      notes: {
+        all: ["Anaphylaktische Reaktionen möglich, Patient nach der Injektion beobachten.", "Vor bzw. zu Beginn einer Aranesp-Therapie geben; Serumeisen/Ferritin kontrollieren."],
+        dog: ["Hund: höchstens 300 mg pro Tier. Größere Mengen werden automatisch auf 300 mg begrenzt."],
+        cat: ["Katze: feste Dosis von 50 mg pro Tier, unabhängig vom Gewicht."]
+      }
+    },
+    {
+      id: "marbocyl", name: "Marbocyl", agent: "Marbofloxacin", cls: "Antibiotikum (Fluorchinolon)",
+      forms: [
+        { label: "Injektionslösung 10 mg/ml", conc: 10, kind: "inj", mass: "mg" }
+      ].map(function (f) {
+        var d = { min: 2, max: 4, def: 2, unit: "mg/kg", route: "SC oder IV (langsam)", interval: "1× täglich", alert: "IV nur LANGSAM geben!" };
+        f.dose = { dog: d, cat: Object.assign({}, d) };
+        return f;
+      }),
+      notes: {
+        all: ["Nicht bei Tieren mit Epilepsie bzw. Krampfanfällen in der Vorgeschichte.", "Fluorchinolone gezielt einsetzen (Antibiogramm, Reserveantibiotikum)."],
+        dog: ["Nicht bei Hunden im Wachstum (Knorpelschäden): unter 12 Monaten, große Rassen unter 18 Monaten."],
+        cat: ["Nicht bei Katzen unter 16 Wochen."]
+      }
+    },
+    {
+      id: "medratesol", name: "Medrate Solubile", agent: "Methylprednisolon-Natriumsuccinat", cls: "Glukokortikoid (kurzwirksam)", tag: "Humanpräparat",
+      forms: [
+        { label: "Injektionslösung 62,5 mg/ml", conc: 62.5, kind: "inj", mass: "mg" }
+      ].map(function (f) {
+        f.dose = {
+          dog: { min: 1, max: 2, def: 1, unit: "mg/kg", route: "IV langsam (über mehrere Minuten) oder IM", interval: "Einmalig bzw. alle 12–24 h", alert: "IV nur LANGSAM über mehrere Minuten! Schnelle Gabe kann Erbrechen und Kollaps auslösen." },
+          cat: { min: 1, max: 2, def: 1, unit: "mg/kg", route: "IV langsam (über mehrere Minuten) oder IM", interval: "Einmalig bzw. alle 12–24 h", alert: "IV nur LANGSAM über mehrere Minuten! Schnelle Gabe kann Erbrechen und Kollaps auslösen." }
+        };
+        return f;
+      }),
+      notes: {
+        all: ["Erst unmittelbar vor Gebrauch lösen.", "Hochdosis 30 mg/kg (Rückenmarkstrauma) gilt nicht mehr als Standard.", "Nicht mit NSAIDs kombinieren. Umwidmung (Humanpräparat)."]
+      }
+    },
+    {
+      id: "metapyrin", name: "Metapyrin", agent: "Metamizol-Natrium", cls: "Analgetikum, Antipyretikum, Spasmolytikum",
+      forms: [
+        { label: "Injektionslösung 500 mg/ml", conc: 500, kind: "inj", mass: "mg", dose: {
+          dog: { min: 25, max: 50, def: 25, unit: "mg/kg", route: "IV (sehr langsam) oder IM", interval: "Bis 3× täglich (alle 8 h)", alert: "IV nur SEHR LANGSAM! Gefahr von Blutdruckabfall und anaphylaktischem Schock." } } },
+        { label: "Novaminsulfon Zäpfchen (rektal)", kind: "supp", mass: "mg", dose: {
+          cat: { min: 25, max: 25, def: 25, locked: true, unit: "mg/kg", route: "Nur rektal als Zäpfchen. Nicht IV!", interval: "Alle 12–24 h",
+            alert: "Katze: Metapyrin NICHT intravenös geben! Nur rektal als Zäpfchen." } } }
+      ],
+      notes: {
+        all: ["Nicht bei Magen-Darm-Ulzera. Mit Glukokortikoiden steigt das Risiko gastrointestinaler Blutungen."],
+        cat: ["Katze: Umwidmung, langsamere Ausscheidung; nicht häufiger als alle 12 h dosieren. Hypersalivation möglich."]
+      }
+    },
+    {
+      id: "metronidazol", name: "Metronidazol", agent: "Metronidazol", cls: "Antibiotikum / Antiprotozoikum",
+      forms: [
+        { label: "Infusionslösung 5 mg/ml", conc: 5, kind: "inj", mass: "mg" }
+      ].map(function (f) {
+        var d = { min: 10, max: 15, def: 10, unit: "mg/kg", route: "IV-Infusion über 20 min", interval: "Alle 12 h", alert: "Nur als LANGSAME Infusion über 20 Minuten geben, nicht als Bolus!" };
+        f.dose = { dog: d, cat: Object.assign({}, d) };
+        return f;
+      }),
+      notes: {
+        all: ["Neurotoxizität (Ataxie, Nystagmus) ab etwa 60 mg/kg/Tag.", "Bei Leberinsuffizienz Dosis reduzieren."]
+      }
+    },
+    {
+      id: "pamidronat", locked: true, name: "Pamidronat", agent: "Pamidronsäure (Dinatriumpamidronat)", cls: "Bisphosphonat", tag: "Humanpräparat",
+      forms: [
+        { label: "Infusionskonzentrat 3 mg/ml", conc: 3, kind: "inj", mass: "mg", dose: {
+          dog: { min: 1, max: 1, def: 1, unit: "mg/kg", route: "IV-Infusion: in 500 ml NaCl 0,9 % geben, über 4 h (ambulante Infusionstherapie)", interval: "Nach Therapieplan",
+            infusion: { bag: 500, hours: 4 }, short: "Infusion über 4 h",
+            alert: "Nur als Infusion: in 500 ml NaCl 0,9 % geben und über 4 Stunden infundieren, nicht als Bolus!" } } }
+      ],
+      notes: {
+        all: ["Nur für Hunde hinterlegt.", "Nierenwerte, Kalzium und Phosphat vor und nach der Behandlung kontrollieren.", "Umwidmung (Humanpräparat)."]
+      }
+    },
+    {
+      id: "ondansetron", name: "Ondansetron", agent: "Ondansetron", cls: "Antiemetikum (5-HT3-Antagonist)", tag: "Humanpräparat",
+      forms: [
+        { label: "Injektionslösung 2 mg/ml", conc: 2, kind: "inj", mass: "mg" }
+      ].map(function (f) {
+        var d = { min: 0.1, max: 1, def: 0.5, unit: "mg/kg", route: "IV langsam, IM oder SC", interval: "Alle 8–12 h", alert: "IV nur LANGSAM geben!" };
+        f.dose = { dog: d, cat: Object.assign({}, d) };
+        return f;
+      }),
+      notes: {
+        all: ["Umwidmung (Humanpräparat).", "Bei Leberinsuffizienz Intervall verlängern.", "Vorsicht bei Herzrhythmusstörungen (QT-Verlängerung)."]
+      }
+    },
+    {
+      id: "rimadyl", locked: true, name: "Rimadyl", agent: "Carprofen", cls: "NSAID",
+      forms: [
+        { label: "Injektionslösung 50 mg/ml", conc: 50, kind: "inj", mass: "mg", dose: {
+          dog: { min: 4, max: 4, def: 4, unit: "mg/kg", route: "SC oder IV", interval: "Einmalig (z. B. präoperativ)" },
+          cat: { min: 4, max: 4, def: 4, unit: "mg/kg", route: "SC oder IV", interval: "Nur einmalig. Nicht wiederholen." } } }
+      ],
+      notes: {
+        all: ["Nicht mit Glukokortikoiden oder anderen NSAIDs kombinieren.", "Nicht bei Dehydratation, Hypotonie, Nieren- oder Lebererkrankung."],
+        cat: ["!Katze: nur eine einzige Injektion. Keine Folgebehandlung mit Carprofen."]
+      }
+    },
+    {
+      id: "adrenalin", name: "Adrenalin", agent: "Epinephrin", cls: "Sympathomimetikum (Notfall)", src: "Plumb's",
+      forms: [{ label: "Ampulle 1 mg/ml", conc: 1, kind: "inj", mass: "mg", dose: both(
+        { min: 0.01, max: 0.01, upper: 0.1, def: 0.01, unit: "mg/kg", route: "IV oder IO", interval: "Reanimation: alle 3–5 min (jeden 2. CPR-Zyklus)" }) }],
+      notes: { all: ["Standard bei Reanimation 0,01 mg/kg; Hochdosis 0,1 mg/kg erst bei verlängerter Reanimation.", "Intratracheal: 0,02–0,1 mg/kg, mit NaCl verdünnt.", "Anaphylaxie: 0,01 mg/kg IM oder langsam IV."] }
+    },
+    {
+      id: "alizin", name: "Alizin", agent: "Aglepriston", cls: "Progesteron-Antagonist", src: "Fachinformation (Hund), Plumb's (Katze)",
+      forms: [{ label: "Injektionslösung 30 mg/ml", conc: 30, kind: "inj", mass: "mg", dose: {
+        dog: { min: 10, max: 10, def: 10, unit: "mg/kg", route: "SC, nicht IV", interval: "2 Injektionen im Abstand von 24 h", alert: "Alizin NICHT intravenös geben! Nur SC.", short: "NICHT IV" },
+        cat: { min: 10, max: 15, def: 10, unit: "mg/kg", route: "SC, nicht IV", interval: "2 Injektionen im Abstand von 24 h", alert: "Alizin NICHT intravenös geben! Nur SC.", short: "NICHT IV" } } }],
+      notes: { all: ["Höchstens 5 ml pro Injektionsstelle (große Hunde: auf mehrere Stellen verteilen).", "Ölige Lösung, Injektionsstelle kann schmerzhaft sein."], cat: ["Katze: Umwidmung."] }
+    },
+    {
+      id: "amoxisel", name: "Amoxisel", agent: "Amoxicillin-Natrium", cls: "Antibiotikum (Aminopenicillin)", src: "Plumb's",
+      forms: [{ label: "Injektionslösung 100 mg/ml", conc: 100, kind: "inj", mass: "mg", dose: both(
+        { min: 10, max: 22, def: 20, unit: "mg/kg", route: "IV langsam, IM oder SC", interval: "Alle 8 h", alert: "IV nur LANGSAM geben!" }) }],
+      notes: { all: ["Erst unmittelbar vor Gebrauch lösen; Konzentration nach dem Lösen prüfen.", "Perioperativ: Wiederholung alle 90 min während der OP."] }
+    },
+    {
+      id: "apomorphin", name: "Aposol / Emedog", agent: "Apomorphin", cls: "Emetikum", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 1 mg/ml", conc: 1, kind: "inj", mass: "mg", dose: {
+        dog: { min: 0.1, max: 0.1, def: 0.1, unit: "mg/kg", route: "SC", interval: "Einmalig" } } }],
+      notes: { all: ["Nur für Hunde. Bei Katzen unwirksam, dort nicht verwenden.", "Nicht bei Bewusstseinstrübung, Krampfanfällen oder nach Aufnahme ätzender Stoffe."] }
+    },
+    {
+      id: "atipam", name: "Atipam", agent: "Atipamezol", cls: "α2-Antagonist (Antidot)", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 5 mg/ml", conc: 5000, kind: "inj", mass: "µg", dose: {
+        dog: { link: { id: "cepedex", factor: 10 }, unit: "× Dex-Dosis", def: 10, min: 10, max: 10, locked: true, route: "IM", interval: "Einmalig, frühestens 15–60 min nach dem Sedativum" },
+        cat: { link: { id: "cepedex", factor: 5 }, unit: "× Dex-Dosis", def: 5, min: 5, max: 5, locked: true, route: "IM", interval: "Einmalig, frühestens 15–60 min nach dem Sedativum" } } }],
+      notes: { all: ["Berechnet aus der Dosis bei Cepedex (Dexmedetomidin) in diesem Rechner.", "Hund: gleiches Volumen wie Cepedex 0,5 mg/ml. Katze: halbes Volumen.", "Bei Medetomidin 1 mg/ml gilt dasselbe Volumenverhältnis."] }
+    },
+    {
+      id: "atropin", name: "Atropinsulfat", agent: "Atropin", cls: "Parasympatholytikum", src: "Plumb's",
+      forms: [{ label: "Ampulle 0,5 mg/ml", conc: 0.5, kind: "inj", mass: "mg", dose: both(
+        { min: 0.02, max: 0.04, def: 0.02, unit: "mg/kg", route: "IV, IM oder SC", interval: "Nach Bedarf" }) }],
+      notes: { all: ["Bradykardie/Prämedikation 0,02–0,04 mg/kg; Reanimation 0,04 mg/kg IV.", "Intratracheal: doppelte Dosis, mit NaCl verdünnt."] }
+    },
+    {
+      id: "brevibloc", name: "Brevibloc", agent: "Esmolol", cls: "β1-Blocker (kurzwirksam)", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Injektionslösung 10 mg/ml", conc: 10, kind: "inj", mass: "mg", dose: both(
+        { min: 0.05, max: 0.5, def: 0.1, unit: "mg/kg", route: "IV langsam über 1–5 min", interval: "Bolus, danach ggf. Dauertropf 25–200 µg/kg/min", alert: "IV nur LANGSAM über 1–5 Minuten geben, mit EKG-Kontrolle!", short: "IV langsam · EKG" }) }],
+      notes: { all: ["Wirkung nach 2 min, Wirkdauer 10–20 min.", "Nicht bei Herzinsuffizienz, AV-Block oder Bradykardie.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "bupivacain", name: "Bupivacain 0,25 %", agent: "Bupivacain", cls: "Lokalanästhetikum (langwirksam)", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Ampulle 2,5 mg/ml", conc: 2.5, kind: "inj", mass: "mg", dose: {
+        dog: { min: 0.5, max: 2, def: 1, unit: "mg/kg", route: "Lokal, Leitungsanästhesie oder epidural. NICHT IV!", interval: "Einmalig (Wirkdauer 4–6 h)", alert: "Bupivacain NIEMALS intravenös! Vor der Injektion aspirieren. Höchstdosis Hund 2 mg/kg.", short: "NICHT IV" },
+        cat: { min: 0.5, max: 1, def: 0.5, unit: "mg/kg", route: "Lokal, Leitungsanästhesie oder epidural. NICHT IV!", interval: "Einmalig (Wirkdauer 4–6 h)", alert: "Bupivacain NIEMALS intravenös! Vor der Injektion aspirieren. Höchstdosis Katze 1 mg/kg.", short: "NICHT IV" } } }],
+      notes: { all: ["Kardiotoxisch bei versehentlicher IV-Gabe.", "Epidural etwa 1 mg/kg.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "bupresol", name: "Bupresol", agent: "Buprenorphin", cls: "Opioid (partieller Agonist)", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 0,3 mg/ml", conc: 300, kind: "inj", mass: "µg", dose: both(
+        { min: 10, max: 20, def: 20, unit: "µg/kg", route: "IV oder IM", interval: "Alle 6–8 h" }) }],
+      notes: { all: ["Wirkungseintritt nach 15–30 min (IV schneller).", "BtM: Dokumentationspflicht."], cat: ["Katze: auch oral-transmukosal (OTM) möglich."] }
+    },
+    {
+      id: "butorgesic", name: "Butorgesic", agent: "Butorphanol", cls: "Opioid (κ-Agonist)", src: "Fachinformation, Plumb's",
+      forms: [{ label: "Injektionslösung 10 mg/ml", conc: 10, kind: "inj", mass: "mg", dose: both(
+        { min: 0.1, max: 0.4, def: 0.2, unit: "mg/kg", route: "IV, IM oder SC", interval: "Alle 1–4 h (kurze Wirkdauer)" }) }],
+      notes: { all: ["Gute Sedation, schwache und kurze Analgesie.", "In Kombination mit α2-Agonisten Dosis reduzieren."] }
+    },
+    {
+      id: "calcium", name: "Calciumgluconat 10 %", agent: "Calciumgluconat", cls: "Elektrolyt", src: "Plumb's",
+      forms: [{ label: "Injektionslösung 100 mg/ml", conc: 100, kind: "inj", mass: "mg", dose: both(
+        { min: 50, max: 150, def: 50, unit: "mg/kg", route: "IV sehr langsam über 10–20 min", interval: "Nach Wirkung; anschließend Dauertropf nach Kalziumwert", alert: "IV nur SEHR LANGSAM über 10–20 Minuten unter EKG-Kontrolle! Bei Bradykardie sofort stoppen.", short: "IV langsam · EKG" }) }],
+      notes: { all: ["50–150 mg/kg entspricht 0,5–1,5 ml/kg der 10%igen Lösung.", "Nicht mit bicarbonat- oder phosphathaltigen Lösungen mischen.", "Nicht SC unverdünnt (Gewebsnekrosen)."] }
+    },
+    {
+      id: "carbesia", name: "Carbesia", agent: "Imidocarbdipropionat", cls: "Antiprotozoikum", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 85 mg/ml", conc: 85, kind: "inj", mass: "mg", dose: {
+        dog: { min: 2.125, max: 4.25, def: 2.125, unit: "mg/kg", route: "IM oder SC, nicht IV", interval: "Babesiose: einmalig (2,125 mg/kg). Ehrlichiose/Mischinfektion: 4,25 mg/kg, ggf. nach 14 Tagen wiederholen", alert: "Carbesia NICHT intravenös geben!", short: "NICHT IV" } } }],
+      notes: { all: ["Nur für Hunde.", "Cholinerge Nebenwirkungen (Speicheln, Durchfall, Unruhe) mit Atropin 0,02–0,04 mg/kg behandelbar; Prämedikation möglich."] }
+    },
+    {
+      id: "cepedex", name: "Cepedex", agent: "Dexmedetomidin", cls: "α2-Agonist (Sedativum)", src: "Fachinformation, Plumb's",
+      forms: [{ label: "Injektionslösung 0,5 mg/ml", conc: 500, kind: "inj", mass: "µg", dose: {
+        dog: { min: 1, max: 10, def: 5, unit: "µg/kg", route: "IV oder IM", interval: "Einmalig; antagonisierbar mit Atipam" },
+        cat: { min: 5, max: 40, def: 10, unit: "µg/kg", route: "IV oder IM", interval: "Einmalig; antagonisierbar mit Atipam" } } }],
+      notes: { all: ["Die Fachinformation dosiert den Hund nach Körperoberfläche (375 µg/m² IV, 500 µg/m² IM); die µg/kg-Werte sind Literaturangaben (Plumb's).", "Bradykardie und Vasokonstriktion: nicht bei Herzerkrankungen.", "Atipam-Menge wird aus dieser Dosis berechnet."], cat: ["Katze laut Fachinformation 40 µg/kg IM zur Sedation."] }
+    },
+    {
+      id: "cephazolin", name: "Cephazolin", agent: "Cefazolin", cls: "Antibiotikum (Cephalosporin 1. Gen.)", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "1 g, gelöst in 10 ml – 100 mg/ml", conc: 100, kind: "inj", mass: "mg", dose: both(
+        { min: 22, max: 22, def: 22, unit: "mg/kg", route: "IV langsam über 3–5 min", interval: "Alle 8 h; perioperativ alle 90 min wiederholen", alert: "IV nur LANGSAM über 3–5 Minuten geben!" }) }],
+      notes: { all: ["Konzentration hängt von der Lösungsmenge ab; Etikett beim Auflösen prüfen.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "convenia", name: "Convenia", agent: "Cefovecin", cls: "Antibiotikum (Cephalosporin 3. Gen., Depot)", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 80 mg/ml (gelöst)", conc: 80, kind: "inj", mass: "mg", dose: both(
+        { min: 8, max: 8, def: 8, unit: "mg/kg", route: "SC", interval: "Einmalig, Wirkdauer 14 Tage; ggf. einmal wiederholen" }) }],
+      notes: { all: ["Gelöste Lösung gekühlt bis 28 Tage haltbar.", "Reserve-Antibiotikum: nur nach Antibiogramm bzw. wenn orale Therapie nicht möglich ist."] }
+    },
+    {
+      id: "cosacthen", name: "Cosacthen", agent: "Tetracosactid", cls: "ACTH-Analogon (Diagnostik)", tag: "Humanpräparat", src: "Laborprotokoll (Laboklin), Plumb's",
+      forms: [{ label: "Ampulle 0,25 mg/ml", conc: 250, kind: "inj", mass: "µg", dose: {
+        dog: { min: 5, max: 5, def: 5, unit: "µg/kg", cap: 250, route: "IV oder IM", interval: "ACTH-Stimulationstest: Blut vor und 60 min nach Injektion" },
+        cat: { min: 5, max: 5, def: 5, unit: "µg/kg", cap: 125, route: "IV oder IM", interval: "ACTH-Stimulationstest: Blut vor und 60 min nach Injektion" } } }],
+      notes: { all: ["Hund höchstens 250 µg (1 Ampulle), Katze höchstens 125 µg.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "cyklokapron", name: "Cyklokapron", agent: "Tranexamsäure", cls: "Antifibrinolytikum", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Ampulle 100 mg/ml", conc: 100, kind: "inj", mass: "mg", dose: {
+        dog: { min: 10, max: 20, def: 10, unit: "mg/kg", route: "IV langsam über 5–10 min", interval: "Alle 8 h", alert: "IV nur LANGSAM über 5–10 Minuten! Schnelle Gabe kann Erbrechen und Blutdruckabfall auslösen." },
+        cat: { min: 10, max: 15, def: 10, unit: "mg/kg", route: "IV langsam über 5–10 min", interval: "Alle 8 h", alert: "IV nur LANGSAM über 5–10 Minuten! Schnelle Gabe kann Erbrechen und Blutdruckabfall auslösen." } } }],
+      notes: { all: ["Als Emetikum beim Hund 50 mg/kg IV (andere Indikation).", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "cytopoint", name: "Cytopoint", agent: "Lokivetmab", cls: "Monoklonaler Antikörper (IL-31)", src: "Fachinformation",
+      forms: [{ label: "Flaschen 10 / 20 / 30 / 40 mg (je 1 ml)", kind: "table", mass: "mg", dose: {
+        dog: { locked: true, unit: "nach Gewicht", min: 3, route: "SC", interval: "Alle 4–8 Wochen",
+          table: [[10, 10, "1 Fl. 10 mg"], [20, 20, "1 Fl. 20 mg"], [30, 30, "1 Fl. 30 mg"], [40, 40, "1 Fl. 40 mg"], [50, 50, "10 mg + 40 mg"], [60, 60, "20 mg + 40 mg"], [70, 70, "30 mg + 40 mg"], [80, 80, "2 × 40 mg"]] } } }],
+      notes: { all: ["Nur für Hunde ab 3 kg. Mindestdosis 1 mg/kg.", "Über 40 kg mehrere Flaschen kombinieren; Inhalt ganzer Flaschen geben."] }
+    },
+    {
+      id: "dexatat", name: "Dexatat", agent: "Dexamethason", cls: "Glukokortikoid", src: "Fachinformation, Plumb's",
+      forms: [{ label: "Injektionslösung 2 mg/ml", conc: 2, kind: "inj", mass: "mg", dose: both(
+        { min: 0.05, max: 0.2, def: 0.1, unit: "mg/kg", route: "IV, IM oder SC", interval: "Einmalig bzw. alle 24 h" }) }],
+      notes: { all: ["Antiinflammatorisch 0,1–0,2 mg/kg; immunsuppressiv und bei Hypoadrenokortizismus-Krise nach Literatur.", "Nicht mit NSAIDs kombinieren."] }
+    },
+    {
+      id: "doxapram", name: "Doxapram V", agent: "Doxapram", cls: "Atemstimulans", src: "Fachinformation, Plumb's",
+      forms: [{ label: "Injektionslösung 20 mg/ml", conc: 20, kind: "inj", mass: "mg", dose: both(
+        { min: 1, max: 5, def: 1, unit: "mg/kg", route: "IV langsam", interval: "Einmalig, ggf. nach 15–20 min wiederholen", alert: "IV nur LANGSAM! Über 5 mg/kg Gefahr von Krampfanfällen.", short: "IV langsam · max 5 mg/kg" }) }],
+      notes: { all: ["Nach Inhalationsnarkose 1–2 mg/kg, nach Barbituraten bis 5 mg/kg.", "Neugeborene nach Sectio: 1–5 mg (Welpe) bzw. 1–2 mg (Kätzchen) sublingual oder in die Nabelvene – feste Menge pro Tier.", "Bei Hunden mit Morphin-Derivaten vorsichtig dosieren."] }
+    },
+    {
+      id: "metoclopramid", name: "Emeprid / MCP-ratiopharm", agent: "Metoclopramid", cls: "Antiemetikum, Prokinetikum", src: "Fachinformation (Emeprid)",
+      forms: [
+        { label: "Emeprid 5 mg/ml", conc: 5, kind: "inj", mass: "mg" },
+        { label: "MCP-ratiopharm 10 mg/2 ml – 5 mg/ml", conc: 5, kind: "inj", mass: "mg" }
+      ].map(function (f) { f.dose = both({ min: 0.25, max: 0.5, def: 0.5, unit: "mg/kg", route: "IV langsam, IM oder SC", interval: "Alle 8–12 h", alert: "IV nur LANGSAM geben!" }); return f; }),
+      notes: { all: ["Dauertropf: 1–2 mg/kg pro Tag.", "Nicht bei gastrointestinaler Obstruktion oder Perforation.", "MCP-ratiopharm: Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "euthadorm", name: "Euthadorm", agent: "Pentobarbital-Natrium", cls: "Euthanasie", tag: "Euthanasie", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 500 mg/ml", conc: 500, kind: "inj", mass: "mg", dose: {
+        dog: { min: 80, max: 133, def: 133, unit: "mg/kg", route: "IV (Hund ca. 1,2 ml/s bis Bewusstlosigkeit, Rest als Sturzinjektion)", interval: "Einmalig", alert: "Nur zur EUTHANASIE. Intrakardial/intraperitoneal nur bei bewusstlosen oder tief narkotisierten Tieren.", short: "Euthanasie" },
+        cat: { min: 133, max: 200, def: 200, unit: "mg/kg", route: "IV", interval: "Einmalig", alert: "Nur zur EUTHANASIE. Intrakardial/intraperitoneal nur bei bewusstlosen oder tief narkotisierten Tieren.", short: "Euthanasie" } } }],
+      notes: { all: ["Intrakardial/intraperitoneal: Hund 100–133 mg/kg, Katze 400 mg/kg.", "Schon 0,8 ml können beim Menschen schwere ZNS-Wirkungen auslösen. Vorsicht bei der Handhabung.", "BtM: Dokumentationspflicht."] }
+    },
+    {
+      id: "fentadon", name: "Fentadon", agent: "Fentanyl", cls: "Opioid (µ-Agonist)", src: "Fachinformation (Hund), Plumb's (Katze)",
+      forms: [{ label: "Injektionslösung 50 µg/ml", conc: 50, kind: "inj", mass: "µg", dose: {
+        dog: { min: 5, max: 10, def: 5, unit: "µg/kg", route: "IV", interval: "Bolus, danach Dauertropf 12–24 µg/kg/h intraoperativ bzw. 6–10 µg/kg/h postoperativ" },
+        cat: { min: 1, max: 3, def: 2, unit: "µg/kg", route: "IV", interval: "Bolus, danach Dauertropf 2–5 µg/kg/h" } } }],
+      notes: { all: ["Geringe therapeutische Breite: Dosis genau abmessen.", "Atemdepression und Bradykardie, Beatmung bereithalten.", "BtM: Dokumentationspflicht."], cat: ["Katze: Umwidmung."] }
+    },
+    {
+      id: "hemosilate", name: "Hemosilate", agent: "Etamsylat", cls: "Hämostyptikum", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 125 mg/ml", conc: 125, kind: "inj", mass: "mg", dose: both(
+        { min: 5, max: 12.5, def: 12.5, unit: "mg/kg", route: "IV oder IM", interval: "Je nach Blutung; ggf. alle 6–8 h wiederholen" }) }],
+      notes: { all: ["Größere verletzte Gefäße vorher ligieren.", "Nicht mit anderen Tierarzneimitteln mischen.", "Nach Anbruch 14 Tage haltbar."] }
+    },
+    {
+      id: "immiticide", name: "Immiticide", agent: "Melarsomin", cls: "Adultizid (Herzwurm)", src: "Fachinformation, AHS-Protokoll",
+      forms: [{ label: "50 mg gelöst in 2 ml – 25 mg/ml", conc: 25, kind: "inj", mass: "mg", dose: {
+        dog: { min: 2.5, max: 2.5, def: 2.5, unit: "mg/kg", route: "Tief IM in die Lendenmuskulatur (L3–L5)", interval: "Tag 1 eine Injektion; nach 1 Monat 2 Injektionen im Abstand von 24 h", alert: "NUR tief IM in die Lendenmuskulatur (L3–L5)! NICHT IV oder SC. Seiten abwechseln.", short: "Nur tief IM · NICHT IV" } } }],
+      notes: { all: ["Nur für Hunde.", "Strikte Boxenruhe 4–6 Wochen nach jeder Injektion (Thromboemboliegefahr).", "Vorbehandlung mit Doxycyclin und makrozyklischem Lakton laut AHS-Protokoll."] }
+    },
+    {
+      id: "kalium", name: "Kaliumchlorid 7,45 %", agent: "Kaliumchlorid", cls: "Elektrolyt (Infusionszusatz)", src: "Plumb's",
+      forms: [{ label: "Ampulle 1 mmol/ml", conc: 1, kind: "rate", mass: "mmol", dose: both(
+        { min: 0.5, max: 0.5, def: 0.5, locked: true, unit: "mmol/kg/h", route: "Nur als Zusatz zur Infusionslösung, gut gemischt", interval: "Dauertropf; Menge nach Serum-Kalium", alert: "NIEMALS unverdünnt oder als Bolus! Nur in Infusionslösung verdünnt. Höchstens 0,5 mmol/kg/h.", short: "Nie als Bolus · nur verdünnt" }) }],
+      notes: { all: ["Angezeigt ist die Höchstrate. Die tatsächliche Zugabe richtet sich nach dem Serum-Kalium.", "Kaliumgehalt des Infusionsbeutels nach Zugabe immer gut durchmischen und den Beutel beschriften."] }
+    },
+    {
+      id: "ketamin", name: "Ketamin", agent: "Ketamin (Anesketin, Ketamin CP)", cls: "Dissoziatives Anästhetikum", src: "Fachinformation, Plumb's",
+      forms: [{ label: "Injektionslösung 100 mg/ml", conc: 100, kind: "inj", mass: "mg", dose: both(
+        { min: 2, max: 10, def: 5, unit: "mg/kg", route: "IV (Einleitung) oder IM", interval: "Einmalig, nach Wirkung nachdosieren", alert: "Nur in KOMBINATION mit Sedativum bzw. Benzodiazepin geben!", short: "Nur in Kombination" }) }],
+      notes: { all: ["Einleitung IV mit Benzodiazepin etwa 5 mg/kg; IM mit α2-Agonist 5–10 mg/kg.", "Analgesie-Dauertropf: 0,5 mg/kg Bolus, dann 2–10 µg/kg/min.", "Augen bleiben offen: Augensalbe."] }
+    },
+    {
+      id: "librela", name: "Librela", agent: "Bedinvetmab", cls: "Monoklonaler Antikörper (NGF)", src: "Fachinformation",
+      forms: [{ label: "Flaschen 5 / 10 / 15 / 20 / 30 mg (je 1 ml)", kind: "table", mass: "mg", dose: {
+        dog: { locked: true, unit: "nach Gewicht", min: 5, route: "SC", interval: "Alle 4 Wochen",
+          table: [[10, 5, "1 Fl. 5 mg"], [20, 10, "1 Fl. 10 mg"], [30, 15, "1 Fl. 15 mg"], [40, 20, "1 Fl. 20 mg"], [60, 30, "1 Fl. 30 mg"], [80, 40, "2 × 20 mg"]] } } }],
+      notes: { all: ["Nur für Hunde ab 5 kg. Zieldosis 0,5–1 mg/kg.", "Über 60 kg zwei Flaschen kombinieren."] }
+    },
+    {
+      id: "lidocain", name: "Lidocain 2 %", agent: "Lidocain (Lidocain-HCl, Lidocard)", cls: "Antiarrhythmikum, Lokalanästhetikum", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Ampulle 20 mg/ml (ohne Adrenalin)", conc: 20, kind: "inj", mass: "mg", dose: {
+        dog: { min: 1, max: 2, upper: 8, def: 2, unit: "mg/kg", route: "IV langsam über 1–2 min", interval: "Bolus, bis zu 8 mg/kg in 10 min; danach Dauertropf 25–80 µg/kg/min", alert: "IV nur LANGSAM über 1–2 Minuten! Krampfanfälle bei Überdosierung.", short: "IV nur langsam" },
+        cat: { min: 0.25, max: 0.5, def: 0.25, unit: "mg/kg", route: "IV sehr langsam über 5 min", interval: "Bolus, Wiederholung nur mit Vorsicht", alert: "Katze: IV nur SEHR LANGSAM über 5 Minuten! Katzen sind sehr empfindlich (Krämpfe, Herzstillstand).", short: "IV sehr langsam" } } }],
+      notes: { all: ["Lokalanästhesie: Höchstdosis Hund 6 mg/kg, Katze 3 mg/kg.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "luminal", name: "Luminal", agent: "Phenobarbital-Natrium", cls: "Antiepileptikum", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Injektionslösung 200 mg/ml", conc: 200, kind: "inj", mass: "mg", dose: both(
+        { min: 2, max: 4, def: 3, unit: "mg/kg", route: "IV langsam oder IM", interval: "Erhaltung alle 12 h", alert: "IV nur LANGSAM geben! Atemdepression möglich.", short: "IV nur langsam" }) }],
+      notes: { all: ["Aufsättigung: 12–24 mg/kg, aufgeteilt in Einzeldosen von 2–4 mg/kg über 24 h.", "Serumspiegel nach 2 Wochen kontrollieren.", "BtM: Dokumentationspflicht. Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "midazolam", name: "Midazolam", agent: "Midazolam", cls: "Benzodiazepin", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Ampulle 1 mg/ml", conc: 1, kind: "inj", mass: "mg", dose: both(
+        { min: 0.1, max: 0.5, def: 0.2, unit: "mg/kg", route: "IV, IM oder intranasal", interval: "Nach Bedarf" }) }],
+      notes: { all: ["Sedation/Narkoseeinleitung 0,1–0,3 mg/kg; Krampfanfall 0,2–0,5 mg/kg.", "Krampfanfall: Dauertropf 0,2–0,5 mg/kg/h.", "BtM. Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "neupogen", name: "Neupogen", agent: "Filgrastim (G-CSF)", cls: "Wachstumsfaktor (Granulozyten)", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Fertigspritze 480 µg/0,5 ml – 960 µg/ml", conc: 960, kind: "inj", mass: "µg", dose: both(
+        { min: 5, max: 5, def: 5, unit: "µg/kg", route: "SC", interval: "1× täglich bis neutrophile Granulozyten wieder normal" }) }],
+      notes: { all: ["Blutbild täglich kontrollieren.", "Bildung von Antikörpern bei längerer Gabe möglich.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "ovogest", name: "Ovogest", agent: "Choriongonadotropin (hCG)", cls: "Gonadotropin", src: "Fachinformation (Hund), Plumb's (Katze)",
+      forms: [{ label: "300 I.E./ml (gelöst)", conc: 300, kind: "inj", mass: "I.E.", dose: {
+        dog: { fixed: true, min: 100, max: 500, def: 500, unit: "I.E./Tier", route: "IM", interval: "Am Tag des Deckens" },
+        cat: { fixed: true, min: 50, max: 250, def: 250, unit: "I.E./Tier", route: "IM oder SC", interval: "Einmalig" } } }],
+      notes: { all: ["Feste Menge pro Tier, unabhängig vom Gewicht.", "Nicht bei sexualhormonabhängigen Tumoren."], cat: ["hCG-Stimulationstest (TiHo Hannover): 250 I.E. IM."] }
+    },
+    {
+      id: "pantozol", name: "Pantozol", agent: "Pantoprazol", cls: "Protonenpumpenhemmer", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "40 mg gelöst in 10 ml NaCl – 4 mg/ml", conc: 4, kind: "inj", mass: "mg", dose: both(
+        { min: 1, max: 1, def: 1, unit: "mg/kg", route: "IV langsam über 15 min", interval: "Alle 12–24 h", alert: "IV nur LANGSAM über 15 Minuten geben!", short: "IV langsam · 15 min" }) }],
+      notes: { all: ["Gelöste Lösung innerhalb von 12 h verbrauchen.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "propovet", name: "PropoVet", agent: "Propofol", cls: "Injektionsanästhetikum", src: "Fachinformation",
+      forms: [{ label: "Emulsion 10 mg/ml", conc: 10, kind: "inj", mass: "mg", dose: {
+        dog: { min: 1, max: 6.5, def: 4, unit: "mg/kg", route: "IV langsam nach Wirkung", interval: "Einleitung; Erhaltung nach Wirkung, max. 24 mg/kg pro Narkose", alert: "IV LANGSAM nach Wirkung titrieren (über 10–40 s)! Apnoe bei schneller Gabe.", short: "Langsam nach Wirkung" },
+        cat: { min: 1.2, max: 8, def: 6, unit: "mg/kg", route: "IV langsam nach Wirkung", interval: "Einleitung; Erhaltung nach Wirkung, max. 24 mg/kg pro Narkose", alert: "IV LANGSAM nach Wirkung titrieren (über 10–40 s)! Apnoe bei schneller Gabe.", short: "Langsam nach Wirkung" } } }],
+      notes: { all: ["Einleitung ohne Prämedikation: Hund 6,5 mg/kg, Katze 8 mg/kg.", "Nach Acepromazin: Hund 4 mg/kg, Katze 6 mg/kg.", "Nach α2-Agonist bis zu 85 % weniger (Hund ca. 1 mg/kg)."] }
+    },
+    {
+      id: "robinul", name: "Robinul-V", agent: "Glycopyrroniumbromid", cls: "Parasympatholytikum", src: "Fachinformation, Plumb's",
+      forms: [{ label: "Injektionslösung 0,2 mg/ml", conc: 200, kind: "inj", mass: "µg", dose: both(
+        { min: 5, max: 10, def: 10, unit: "µg/kg", route: "IV, IM oder SC", interval: "Nach Bedarf" }) }],
+      notes: { all: ["Wirkt länger als Atropin und passiert die Blut-Hirn-Schranke kaum."] }
+    },
+    {
+      id: "solensia", name: "Solensia", agent: "Frunevetmab", cls: "Monoklonaler Antikörper (NGF)", src: "Fachinformation",
+      forms: [{ label: "Flasche 7 mg/ml (1 ml)", kind: "table", mass: "mg", dose: {
+        cat: { locked: true, unit: "nach Gewicht", min: 2.5, route: "SC", interval: "Alle 4 Wochen",
+          table: [[7, 7, "1 Fl. (1 ml)"], [14, 14, "2 Fl. (2 ml)"]] } } }],
+      notes: { all: ["Nur für Katzen ab 2,5 kg. Zieldosis 1–2,8 mg/kg."] }
+    },
+    {
+      id: "diazepam", name: "Solupam / Ziapam", agent: "Diazepam", cls: "Benzodiazepin", src: "Fachinformation, Plumb's",
+      forms: [
+        { label: "Solupam 5 mg/ml", conc: 5, kind: "inj", mass: "mg" },
+        { label: "Ziapam 5 mg/ml", conc: 5, kind: "inj", mass: "mg" }
+      ].map(function (f) { f.dose = both({ min: 0.2, max: 1, def: 0.5, unit: "mg/kg", route: "IV langsam (oder rektal), nicht IM", interval: "Krampfanfall: bis zu 3× im Abstand von 10 min", alert: "IV nur LANGSAM! Nicht IM (unzuverlässige Aufnahme).", short: "IV nur langsam" }); return f; }),
+      notes: { all: ["Krampfanfall 0,5–1 mg/kg IV; Sedation/Einleitung 0,2–0,5 mg/kg.", "Rektal 1–2 mg/kg.", "BtM: Dokumentationspflicht."] }
+    },
+    {
+      id: "triam", name: "TRIAM 40", agent: "Triamcinolonacetonid", cls: "Glukokortikoid (Depot)", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Kristallsuspension 40 mg/ml", conc: 40, kind: "inj", mass: "mg", dose: both(
+        { min: 0.1, max: 0.2, def: 0.1, unit: "mg/kg", route: "IM oder SC, nicht IV", interval: "Einmalig; Wiederholung frühestens nach 1–2 Wochen", alert: "TRIAM NICHT intravenös geben! Kristallsuspension.", short: "NICHT IV" }) }],
+      notes: { all: ["Vor Gebrauch schütteln.", "Intraläsional: 1 mg pro cm² Läsion (andere Anwendung).", "Nicht mit NSAIDs kombinieren. Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "trymox", name: "Trymox LA", agent: "Amoxicillin-Trihydrat (Depot)", cls: "Antibiotikum (Aminopenicillin)", src: "Fachinformation",
+      forms: [{ label: "Suspension 150 mg/ml", conc: 150, kind: "inj", mass: "mg", dose: both(
+        { min: 15, max: 15, def: 15, unit: "mg/kg", route: "IM oder SC, nicht IV", interval: "Wiederholung nach 48 h", alert: "Trymox LA NICHT intravenös geben! Depotsuspension.", short: "NICHT IV" }) }],
+      notes: { all: ["Vor Gebrauch gut schütteln.", "Entspricht 1 ml pro 10 kg."] }
+    },
+    {
+      id: "vetmedin", name: "Vetmedin Injektionslösung", agent: "Pimobendan", cls: "Inodilatator", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 0,75 mg/ml", conc: 0.75, kind: "inj", mass: "mg", dose: {
+        dog: { min: 0.15, max: 0.15, def: 0.15, unit: "mg/kg", route: "IV", interval: "Einmalig; danach orale Therapie nach 12 h" } } }],
+      notes: { all: ["Nur für Hunde.", "Entspricht 0,2 ml/kg."] }
+    },
+    {
+      id: "vitb1", name: "Vitamin B1 Hevert", agent: "Thiaminchlorid", cls: "Vitamin", tag: "Humanpräparat", src: "Plumb's",
+      forms: [{ label: "Ampulle 200 mg/2 ml – 100 mg/ml", conc: 100, kind: "inj", mass: "mg", dose: {
+        dog: { fixed: true, min: 10, max: 100, def: 50, unit: "mg/Tier", route: "IM oder SC", interval: "Alle 12–24 h", alert: "Bevorzugt IM oder SC! IV nur sehr langsam und verdünnt (Anaphylaxie).", short: "Bevorzugt IM/SC" },
+        cat: { fixed: true, min: 10, max: 25, def: 25, unit: "mg/Tier", route: "IM oder SC", interval: "Alle 12–24 h", alert: "Bevorzugt IM oder SC! IV nur sehr langsam und verdünnt (Anaphylaxie).", short: "Bevorzugt IM/SC" } } }],
+      notes: { all: ["Feste Menge pro Tier.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "vitb12", name: "Vitamin B12", agent: "Cyanocobalamin (Panpharma, Wiedemann)", cls: "Vitamin", tag: "Humanpräparat", src: "Plumb's / GI Lab Texas A&M",
+      forms: [{ label: "Ampulle 1000 µg/ml", conc: 1000, kind: "table", mass: "µg", dose: {
+        dog: { locked: true, unit: "nach Gewicht", min: 0, route: "SC", interval: "1× wöchentlich für 6 Wochen, dann nach Cobalaminwert",
+          table: [[10, 250], [20, 400], [30, 600], [40, 800], [50, 1000], [999, 1200]] },
+        cat: { locked: true, unit: "nach Gewicht", min: 0, route: "SC", interval: "1× wöchentlich für 6 Wochen, dann nach Cobalaminwert",
+          table: [[999, 250]] } } }],
+      notes: { all: ["Cobalamin 1 Monat nach der letzten Injektion kontrollieren.", "Umwidmung (Humanpräparat)."] }
+    },
+    {
+      id: "vitk1", name: "Vitamin K1", agent: "Phytomenadion (Laboratoire TVM)", cls: "Vitamin (Antidot Cumarine)", src: "Fachinformation, Plumb's",
+      forms: [{ label: "Ampulle 10 mg/ml", conc: 10, kind: "inj", mass: "mg", dose: both(
+        { min: 2.5, max: 5, def: 5, unit: "mg/kg", route: "SC (an mehreren Stellen) oder IV sehr langsam", interval: "Tag 1; danach oral 2,5–5 mg/kg/Tag für 3–6 Wochen", alert: "Bevorzugt SC! IV nur SEHR LANGSAM (Anaphylaxie). Nicht IM (Hämatome).", short: "IV sehr langsam · nicht IM" }) }],
+      notes: { all: ["Gerinnung (PT) 48–72 h nach der letzten Gabe kontrollieren."] }
+    },
+    {
+      id: "zenalpha", name: "Zenalpha", agent: "Medetomidin + Vatinoxan", cls: "α2-Agonist mit peripherem Antagonisten", src: "Fachinformation",
+      forms: [{ label: "Injektionslösung 0,5 mg/ml Medetomidin", conc: 500, kind: "bsa", mass: "µg", dose: {
+        dog: { locked: true, bsa: 1000, unit: "µg/m² KOF", min: 1000, max: 1000, def: 1000, route: "Nur IM", interval: "Einmalig", alert: "Zenalpha NUR intramuskulär! Nicht IV.", short: "Nur IM" } } }],
+      notes: { all: ["Nur für Hunde. Dosis nach Körperoberfläche: 1 mg Medetomidin/m² (KOF = 0,101 × kg^⅔).", "Mit der Dosistabelle der Packungsbeilage abgleichen; die Tabelle rundet auf 0,1 ml.", "Nüchterne Hunde. Hypothermie und Bradykardie möglich."] }
+    },
+    {
+      id: "zycortal", name: "Zycortal", agent: "Desoxycorticosteronpivalat (DOCP)", cls: "Mineralokortikoid", src: "Fachinformation",
+      forms: [{ label: "Suspension 25 mg/ml", conc: 25, kind: "inj", mass: "mg", dose: {
+        dog: { min: 2.2, max: 2.2, def: 2.2, unit: "mg/kg", route: "SC", interval: "Startdosis; Na/K nach 10 Tagen kontrollieren, 2. Dosis an Tag 25 anpassen" } } }],
+      notes: { all: ["Nur für Hunde (Hypoadrenokortizismus).", "Vor Gebrauch schütteln.", "Zusätzlich Glukokortikoid (z. B. Prednisolon) erforderlich."] }
+    }
+  ];
+
+  DRUGS.sort(function (a, b) { return a.name.localeCompare(b.name, "de"); });
+
+  // Gruppen in klinischer Reihenfolge; innerhalb jeder Gruppe alphabetisch
+  var GROUPS = [
+    { name: "Notfall & Herz", ids: ["adrenalin", "atropin", "brevibloc", "diuren", "doxapram", "lidocain", "vetmedin"] },
+    { name: "Narkose, Sedation & Analgesie", ids: ["atipam", "bupivacain", "bupresol", "butorgesic", "cepedex", "fentadon", "ketamin", "midazolam", "propovet", "robinul", "zenalpha"] },
+    { name: "Schmerz, Entzündung & Juckreiz", ids: ["metapyrin", "rimadyl", "librela", "solensia", "cytopoint"] },
+    { name: "Glukokortikoide", ids: ["dexatat", "depomedrate", "medratesol", "triam"] },
+    { name: "Antiinfektiva & Antiparasitika", ids: ["amoxisel", "cephazolin", "convenia", "marbocyl", "metronidazol", "trymox", "carbesia", "immiticide"] },
+    { name: "Magen-Darm", ids: ["cerenia", "metoclopramid", "ondansetron", "pantozol", "apomorphin"] },
+    { name: "Krampfanfälle", ids: ["diazepam", "luminal"] },
+    { name: "Blut & Gerinnung", ids: ["aranesp", "eisen", "neupogen", "cyklokapron", "hemosilate", "vitk1"] },
+    { name: "Elektrolyte & Vitamine", ids: ["kalium", "calcium", "vitb1", "vitb12"] },
+    { name: "Hormone & Diagnostik", ids: ["alizin", "ovogest", "zycortal", "cosacthen"] },
+    { name: "Onkologie", ids: ["pamidronat"] },
+    { name: "Euthanasie", ids: ["euthadorm"] }
+  ];
+  (function () {
+    var known = {};
+    GROUPS.forEach(function (g) { g.ids.forEach(function (id) { known[id] = true; }); });
+    var rest = DRUGS.filter(function (d) { return !known[d.id]; }).map(function (d) { return d.id; });
+    if (rest.length) GROUPS.push({ name: "Sonstiges", ids: rest });
+  })();
+
+  var nf = function (v, max) { return new Intl.NumberFormat("de-DE", { maximumFractionDigits: max, minimumFractionDigits: 0 }).format(v); };
+  var parse = function (s) { var n = parseFloat(String(s).replace(",", ".").trim()); return isFinite(n) ? n : NaN; };
+  var fmtVol = function (v) { return v < 0.1 ? nf(v, 3) : v < 10 ? nf(v, 2) : nf(v, 1); };
+  var fmtMass = function (v) { return v < 1 ? nf(v, 2) : v < 100 ? nf(v, 1) : nf(v, 0); };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+
+  var state = { species: store.get("dr.species") === "cat" ? "cat" : "dog", weight: NaN, sel: {}, open: {}, collapsed: {} };
+  try { state.collapsed = JSON.parse(store.get("dr.collapsed") || "{}") || {}; } catch (e) {}
+  var savedW = store.get("dr.weight");
+  var weightEl = document.getElementById("weight");
+  if (savedW) weightEl.value = savedW;
+  else weightEl.value = state.species === "cat" ? "4" : "10";
+  state.weight = parse(weightEl.value);
+
+  var listEl = document.getElementById("list");
+
+  function formsFor(drug) {
+    return drug.forms.filter(function (f) { return f.dose && f.dose[state.species]; });
+  }
+
+  function resetSelections() {
+    state.sel = {};
+    DRUGS.forEach(function (d) {
+      var f = formsFor(d)[0];
+      state.sel[d.id] = { form: 0, dose: f ? f.dose[state.species].def : NaN };
+    });
+  }
+
+  function lockedText(p) {
+    if (p.table) return "nach Gewicht";
+    if (p.bsa) return nf(p.bsa / 1000, 2) + " mg/m² KOF";
+    if (p.link) return p.link.factor + " × Cepedex";
+    return nf(p.def, 3) + " " + p.unit;
+  }
+
+  function tableText(p, f) {
+    var lo = p.min;
+    return p.table.map(function (r) {
+      var t = (r[0] >= 999 ? "ab " + nf(lo, 1) + " kg" : nf(lo, 1) + "–" + nf(r[0], 1) + " kg") + ": " + (r[2] || nf(r[1], 0) + " " + f.mass);
+      lo = r[0] + 0.1;
+      return t;
+    }).join(" · ");
+  }
+
+  function rangeText(p) {
+    var r = p.min === p.max ? nf(p.min, 2) : nf(p.min, 2) + "–" + nf(p.max, 2);
+    var t = (p.fixed ? "Feste Dosis " : p.min === p.max ? "Standarddosis " : "Bereich ") + r + " " + p.unit;
+    if (p.upper) t += " (schwere Fälle bis " + nf(p.upper, 2) + ")";
+    return t;
+  }
+
+  function shortAlert(a) {
+    if (/verdünnen/.test(a)) return "1:1 mit NaCl verdünnen";
+    if (/rektal/i.test(a)) return "NICHT IV · nur rektal";
+    if (/NICHT/.test(a)) return "NICHT IV";
+    if (/Infusion/.test(a)) return "Infusion über 20 min";
+    if (/SEHR LANGSAM/.test(a)) return "IV sehr langsam";
+    return "IV nur langsam";
+  }
+
+  function spanText(p, f) {
+    var t = p.max > p.min ? nf(p.min, 2) + "–" + nf(p.max, 2) + " " + p.unit : p.upper ? nf(p.min, 2) + " " + p.unit : "";
+    if (p.upper) t += " (bis " + nf(p.upper, 2) + ")";
+    if (p.cap) t += (t ? ", " : "") + "max. " + nf(p.cap, 0) + " " + f.mass;
+    return t;
+  }
+
+  function render() {
+    document.body.classList.toggle("cat", state.species === "cat");
+    ["dog", "cat"].forEach(function (s) {
+      document.getElementById("sp-" + s).setAttribute("aria-pressed", String(state.species === s));
+    });
+
+    var rowHtml = {};
+    DRUGS.forEach(function (d) {
+      var forms = formsFor(d);
+      if (!forms.length) return;
+      var sel = state.sel[d.id];
+      var f = forms[sel.form];
+      var p = f.dose[state.species];
+      var open = !!state.open[d.id];
+      var locked = d.locked || p.locked;
+      var notes = (d.notes.all || []).concat(d.notes[state.species] || []);
+      var tag = d.tag || "";
+      if (state.species === "cat" && d.id === "metapyrin") tag = "Umwidmung Katze";
+
+      rowHtml[d.id] = '<article class="row' + (open ? ' open' : '') + '" id="card-' + d.id + '" data-search="' + esc((d.name + " " + d.agent + " " + d.cls).toLowerCase()) + '">' +
+        '<button type="button" class="tog" data-toggle="' + d.id + '" aria-expanded="' + open + '" aria-controls="det-' + d.id + '" aria-label="Details zu ' + esc(d.name) + '">' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 5.4 10 4l8 8-8 8-1.4-1.4 6.6-6.6z"/></svg></button>' +
+        '<div class="name" data-toggle="' + d.id + '"><div class="nl"><h2>' + esc(d.name) + '</h2>' +
+          (p.alert ? '<span class="chip" title="' + esc(p.alert) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1 21h22L12 2Zm-1 7h2v6h-2V9Zm0 8h2v2h-2v-2Z"/></svg>' + esc(p.short || shortAlert(p.alert)) + '</span>' : '') +
+          '</div><span class="agent">' + esc(d.agent) + '</span></div>' +
+        '<div class="form">' +
+          (forms.length > 1
+            ? '<select id="form-' + d.id + '" data-id="' + d.id + '" aria-label="Präparat ' + esc(d.name) + '">' + forms.map(function (x, i) { return '<option value="' + i + '"' + (i === sel.form ? " selected" : "") + '>' + esc(x.label) + '</option>'; }).join("") + '</select>'
+            : '<span class="form-text">' + esc(f.label) + '</span>') +
+        '</div>' +
+        '<div class="dosecell">' +
+        (locked
+          ? '<div class="dose locked" title="Feste Dosierung, nicht veränderbar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z"/></svg>' +
+            '<span class="fixed-val">' + esc(lockedText(p)) + '</span></div>'
+          : '<div class="dose"><input id="dose-' + d.id + '" data-id="' + d.id + '" inputmode="decimal" autocomplete="off" aria-label="Dosis ' + esc(d.name) + ' in ' + esc(p.unit) + '" value="' + nf(sel.dose, 3) + '">' +
+            '<span class="unit">' + esc(p.unit) + '</span>' +
+            '<button type="button" class="step" data-id="' + d.id + '" data-dir="-1" aria-label="Dosis verringern">−</button>' +
+            '<button type="button" class="step" data-id="' + d.id + '" data-dir="1" aria-label="Dosis erhöhen">+</button></div>') +
+        (!locked && (p.max > p.min || p.upper || p.cap) ? '<div class="span">' + esc(spanText(p, f)) + '</div>' : '') +
+        '</div>' +
+        '<div class="res" id="res-' + d.id + '" aria-live="polite"></div>' +
+        '<div class="det" id="det-' + d.id + '"' + (open ? '' : ' hidden') + '>' +
+          (p.alert ? '<div class="danger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1 21h22L12 2Zm-1 7h2v6h-2V9Zm0 8h2v2h-2v-2Z"/></svg><span>' + esc(p.alert) + '</span></div>' : '') +
+          '<div class="range">' + esc(d.cls) + ' · ' + (locked
+            ? (p.table ? 'Dosis nach Gewicht: ' + esc(tableText(p, f)) : 'Feste Dosierung ' + esc(lockedText(p)) + ', nicht veränderbar')
+            : esc(rangeText(p)) + ' · <button type="button" data-reset="' + d.id + '">Standard (' + nf(p.def, 3) + ')</button>') + '</div>' +
+          (tag ? '<span class="tag">' + esc(tag) + '</span>' : '') +
+          '<dl class="meta">' + (d.src ? '<dt>Quelle</dt><dd>' + esc(d.src) + '</dd>' : '') + '<dt>Applikation</dt><dd>' + esc(p.route) + '</dd><dt>Intervall</dt><dd>' + esc(p.interval) + '</dd></dl>' +
+          '<ul class="notes">' + notes.map(function (n) {
+            var w = n.charAt(0) === "!";
+            return '<li' + (w ? ' class="warn"' : "") + '>' + esc(w ? n.slice(1) : n) + '</li>';
+          }).join("") + '</ul>' +
+        '</div>' +
+        '</article>';
+    });
+    var html = "";
+    GROUPS.forEach(function (g, gi) {
+      var rows = DRUGS.filter(function (d) { return g.ids.indexOf(d.id) !== -1 && rowHtml[d.id]; });
+      if (!rows.length) return;
+      var shut = !!state.collapsed[g.name];
+      html += '<section class="group' + (shut ? ' shut' : '') + '" data-gname="' + esc(g.name) + '">' +
+        '<button type="button" class="ghead" data-group-toggle="' + esc(g.name) + '" aria-expanded="' + !shut + '">' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 5.4 10 4l8 8-8 8-1.4-1.4 6.6-6.6z"/></svg>' +
+          '<span class="gname">' + esc(g.name) + '</span><span class="gcount">' + rows.length + '</span></button>' +
+        '<div class="glist">' + rows.map(function (d) { return rowHtml[d.id]; }).join("") + '</div></section>';
+    });
+    listEl.innerHTML = html;
+    DRUGS.forEach(function (d) { updateResult(d.id); });
+    applySearch();
+    checkWeight();
+  }
+
+  function stepFor(p) {
+    var span = Math.max(p.max, p.def);
+    return span <= 1 ? 0.05 : span <= 5 ? 0.25 : span <= 20 ? 1 : 5;
+  }
+
+  function bigLine(v, u) { return '<div class="big"><span class="num">' + v + '</span><span class="u">' + u + '</span></div>'; }
+  function statusLine(cls, text) { return '<div class="status ' + cls + '">' + esc(text) + '</div>'; }
+
+  // Rechenarten ohne mg/kg-Eingabe: Gewichtstabelle, Körperoberfläche, gekoppelte Dosis, Höchstrate
+  function special_(d, f, p, w) {
+    if (p.table) {
+      if (w < p.min) return statusLine("bad", "Unter Mindestgewicht " + nf(p.min, 1) + " kg");
+      var row = p.table.filter(function (r) { return w <= r[0]; })[0];
+      if (!row) return statusLine("bad", "Über " + nf(p.table[p.table.length - 1][0], 0) + " kg: Kombination laut Fachinformation");
+      if (row[2]) return '<div class="big"><span class="num txt">' + esc(row[2]) + '</span></div>' + '<div class="sub">= ' + fmtMass(row[1]) + ' ' + f.mass + ' · ' + nf(row[1] / w, 2) + ' ' + f.mass + '/kg</div>';
+      return bigLine(fmtVol(row[1] / f.conc), "ml") + '<div class="sub">= ' + fmtMass(row[1]) + ' ' + f.mass + '</div>';
+    }
+    if (p.bsa) {
+      var bsa = 0.101 * Math.pow(w, 2 / 3);
+      var ug = p.bsa * bsa;
+      return bigLine(fmtVol(ug / f.conc), "ml") + '<div class="sub">= ' + fmtMass(ug) + ' µg · KOF ' + nf(bsa, 2) + ' m²</div>';
+    }
+    if (p.link) {
+      var src = DRUGS.filter(function (x) { return x.id === p.link.id; })[0];
+      var sp = src.forms[0].dose[state.species];
+      var srcDose = state.sel[src.id].dose;
+      if (!(srcDose > 0)) return '<div class="sub">Dosis bei ' + esc(src.name) + ' eingeben.</div>';
+      var amt = p.link.factor * srcDose * w;
+      return bigLine(fmtVol(amt / f.conc), "ml") + '<div class="sub">= ' + fmtMass(amt / 1000) + ' mg · bei ' + esc(src.name) + ' ' + nf(srcDose, 2) + ' ' + esc(sp.unit) + '</div>';
+    }
+    if (f.kind === "rate") {
+      var mmol = p.def * w;
+      return '<div class="sub">höchstens</div>' + bigLine(fmtVol(mmol / f.conc), "ml/h") + '<div class="sub">= ' + fmtMass(mmol) + ' mmol K⁺ pro Stunde</div>';
+    }
+    return "";
+  }
+
+  function updateResult(id) {
+    var d = DRUGS.filter(function (x) { return x.id === id; })[0];
+    var f = formsFor(d)[state.sel[id].form];
+    if (!f) return;
+    var p = f.dose[state.species];
+    var dose = state.sel[id].dose;
+    var w = state.weight;
+    var el = document.getElementById("res-" + id);
+
+    if (!(w > 0) && !p.fixed) { el.innerHTML = '<div class="sub">Körpergewicht eingeben.</div>'; return; }
+    var special = special_(d, f, p, w);
+    if (special) { el.innerHTML = special; return; }
+    if (!(dose > 0)) { el.innerHTML = '<div class="sub">Dosis eingeben.</div>'; return; }
+
+    var amount = p.fixed ? dose : dose * w;
+    var capped = p.cap && amount > p.cap;
+    if (capped) amount = p.cap;
+    var status = { cls: "ok", text: "Im Dosisbereich" };
+    var top = p.upper || p.max;
+    if (dose < p.min - 1e-9) status = { cls: "warn", text: "Unter dem üblichen Bereich" };
+    else if (dose > top + 1e-9) status = { cls: "bad", text: "Über der Höchstdosis" };
+    else if (dose > p.max + 1e-9) status = { cls: "warn", text: "Nur für schwere Fälle" };
+    if (capped) status = { cls: "warn", text: "Auf Höchstmenge " + nf(p.cap, 0) + " " + f.mass + " begrenzt" };
+
+    var out = "";
+    if (f.kind === "supp") {
+      out += '<div class="big"><span class="num">' + fmtMass(amount) + '</span><span class="u">mg</span></div>' +
+        '<div class="sub">rektal</div>';
+    } else if (f.kind === "inj") {
+      var ml = amount / f.conc;
+      out += '<div class="big"><span class="num">' + fmtVol(ml) + '</span><span class="u">ml</span></div>' +
+        '<div class="sub">= ' + fmtMass(amount) + ' ' + f.mass + (capped ? ' (Höchstmenge)' : '') + '</div>' +
+        (p.dilute ? '<div class="sub">+ ' + fmtVol(ml) + ' ml NaCl = ' + fmtVol(ml * 2) + ' ml gesamt</div>' : '') +
+        (p.infusion ? '<div class="sub">in ' + p.infusion.bag + ' ml NaCl · ' + nf((p.infusion.bag + ml) / p.infusion.hours, 0) + ' ml/h über ' + p.infusion.hours + ' h</div>' : '');
+      if (p.infusion) {
+        // 1-fache Erhaltung laut Praxisvorgabe: Körpergewicht (kg) × 10 = ml/h
+        var rate = (p.infusion.bag + ml) / p.infusion.hours;
+        var maint = w * 10;
+        if (rate > maint) status = { cls: "bad", text: "Rate über 1-facher Erhaltung (" + nf(maint, 0) + " ml/h)" };
+      }
+    }
+    if (status.cls !== "ok") out += '<div class="status ' + status.cls + '">' + esc(status.text) + '</div>';
+    el.innerHTML = out;
+  }
+
+  function checkWeight() {
+    var a = document.getElementById("weight-alert");
+    var w = state.weight, msg = "";
+    if (!(w > 0)) msg = "Bitte ein gültiges Körpergewicht in kg eingeben.";
+    else if (state.species === "cat" && w > 12) msg = "Ungewöhnlich hohes Gewicht für eine Katze. Eingabe prüfen.";
+    else if (state.species === "dog" && w > 90) msg = "Ungewöhnlich hohes Gewicht für einen Hund. Eingabe prüfen.";
+    a.textContent = msg;
+    a.hidden = !msg;
+  }
+
+  function applySearch() {
+    var q = document.getElementById("q").value.trim().toLowerCase();
+    var any = false;
+    Array.prototype.forEach.call(listEl.querySelectorAll(".group"), function (g) {
+      var n = 0;
+      Array.prototype.forEach.call(g.querySelectorAll(".row"), function (c) {
+        var show = !q || c.getAttribute("data-search").indexOf(q) !== -1;
+        c.hidden = !show;
+        if (show) n++;
+      });
+      g.hidden = n === 0;
+      g.classList.toggle("searching", !!q);
+      if (n) any = true;
+    });
+    document.getElementById("empty").hidden = any;
+  }
+
+  // Events
+  document.querySelectorAll(".seg button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var sp = b.getAttribute("data-sp");
+      if (sp === state.species) return;
+      state.species = sp;
+      store.set("dr.species", sp);
+      resetSelections();
+      render();
+    });
+  });
+
+  weightEl.addEventListener("input", function () {
+    state.weight = parse(weightEl.value);
+    store.set("dr.weight", weightEl.value);
+    DRUGS.forEach(function (d) { updateResult(d.id); });
+    checkWeight();
+  });
+
+  document.getElementById("q").addEventListener("input", applySearch);
+
+  listEl.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.tagName === "SELECT") {
+      var id = t.getAttribute("data-id");
+      var d = DRUGS.filter(function (x) { return x.id === id; })[0];
+      var idx = parseInt(t.value, 10);
+      var f = formsFor(d)[idx];
+      state.sel[id] = { form: idx, dose: f.dose[state.species].def };
+      render();
+      var s = document.getElementById("form-" + id); if (s) s.focus();
+    }
+  });
+
+  listEl.addEventListener("input", function (e) {
+    var t = e.target;
+    if (t.tagName === "INPUT" && t.id.indexOf("dose-") === 0) {
+      var id = t.getAttribute("data-id");
+      state.sel[id].dose = parse(t.value);
+      DRUGS.forEach(function (x) { updateResult(x.id); });
+    }
+  });
+
+  listEl.addEventListener("click", function (e) {
+    var gt = e.target.closest("[data-group-toggle]");
+    if (gt) {
+      var gname = gt.getAttribute("data-group-toggle");
+      state.collapsed[gname] = !state.collapsed[gname];
+      gt.parentNode.classList.toggle("shut", state.collapsed[gname]);
+      gt.setAttribute("aria-expanded", String(!state.collapsed[gname]));
+      store.set("dr.collapsed", JSON.stringify(state.collapsed));
+      return;
+    }
+    var tg = e.target.closest("[data-toggle]");
+    if (tg) {
+      var tid = tg.getAttribute("data-toggle");
+      state.open[tid] = !state.open[tid];
+      var row = document.getElementById("card-" + tid);
+      row.classList.toggle("open", state.open[tid]);
+      row.querySelector(".tog").setAttribute("aria-expanded", String(state.open[tid]));
+      document.getElementById("det-" + tid).hidden = !state.open[tid];
+      return;
+    }
+    var t = e.target.closest("button");
+    if (!t) return;
+    var id = t.getAttribute("data-id") || t.getAttribute("data-reset");
+    var d = DRUGS.filter(function (x) { return x.id === id; })[0];
+    if (!d) return;
+    var p = formsFor(d)[state.sel[id].form].dose[state.species];
+    var input = document.getElementById("dose-" + id);
+    if (t.hasAttribute("data-reset")) {
+      state.sel[id].dose = p.def;
+    } else {
+      var step = stepFor(p);
+      var cur = state.sel[id].dose > 0 ? state.sel[id].dose : p.def;
+      var next = Math.round((cur + step * parseInt(t.getAttribute("data-dir"), 10)) / step) * step;
+      state.sel[id].dose = Math.max(step, +next.toFixed(3));
+    }
+    input.value = nf(state.sel[id].dose, 3);
+    DRUGS.forEach(function (x) { updateResult(x.id); });
+  });
+
+  resetSelections();
+  render();
+})();
+</script>
+</body>
+</html>
