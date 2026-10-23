@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chemo-Kostenvoranschlag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Atkinson+Hyperlegible+Mono:wght@400;600&display=swap">
+<style>
+/* Design wie der Dosierungsrechner: sticky Patientenleiste (Tierart + Gewicht), darunter Gruppen mit Akzentlinie; Akzentfarbe je Tierart. */
+:root{
+  --bg:#eef2f4; --surface:#ffffff; --fg:#15212b; --muted:#5b6b78; --line:#d6dee4;
+  --dog:#8a3e6b; --cat:#c2266f; --accent:var(--dog);
+  --accent-soft:color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --warn:#a15c00; --warn-bg:#fdf1dd;
+  --iv-bg:#e3eef8; --iv-fg:#1d4f7a; --po-bg:#fbefdc; --po-fg:#7a4a0e;
+  --f-body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+  --f-mono:"Atkinson Hyperlegible Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1519; --surface:#172129; --fg:#e5ecf1; --muted:#93a3b0; --line:#2a3742;
+  --dog:#e09ac3; --cat:#ff7eb6; --warn:#f0b45a; --warn-bg:#33270f;
+  --iv-bg:#1b2f40; --iv-fg:#a9cff5; --po-bg:#3a2c14; --po-fg:#f0cf94;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1519; --surface:#172129; --fg:#e5ecf1; --muted:#93a3b0; --line:#2a3742;
+  --dog:#e09ac3; --cat:#ff7eb6; --warn:#f0b45a; --warn-bg:#33270f;
+  --iv-bg:#1b2f40; --iv-fg:#a9cff5; --po-bg:#3a2c14; --po-fg:#f0cf94;
+  color-scheme:dark;
+}
+body.cat{--accent:var(--cat)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--f-body);font-size:15px;line-height:1.45;background:var(--bg);color:var(--fg)}
+
+/* Patientenleiste */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:12px 16px}
+.bar-inner{max-width:1480px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:end;gap:12px 20px}
+.brand{flex:1 1 220px;min-width:0}
+.brand h1{font-size:1.35rem;line-height:1.2;text-wrap:balance}
+.brand p{margin-top:2px;color:var(--muted);font-size:.85rem}
+.field-label{display:block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;font-weight:700}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;background:var(--bg)}
+.species-btn{font:inherit;font-weight:700;border:0;background:transparent;color:var(--muted);padding:7px 16px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.species-btn svg{width:18px;height:18px;fill:currentColor}
+.species-btn[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.species-btn:focus-visible,input:focus-visible,summary:focus-visible,.toolbar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.weight{display:flex;align-items:center;border:2px solid var(--accent);border-radius:10px;background:var(--surface);overflow:hidden}
+.weight input{width:6.5ch;border:0;background:transparent;color:var(--fg);font:600 1.35rem/1 var(--f-mono);padding:7px 4px 7px 12px;text-align:right;font-variant-numeric:tabular-nums}
+.weight input:focus{outline:none}
+.weight span{padding:0 12px 0 4px;font-weight:700;color:var(--muted)}
+.kof strong{display:block;font:600 1.35rem/1 var(--f-mono);color:var(--accent);padding:9px 0;font-variant-numeric:tabular-nums}
+
+/* Inhalt */
+.wrap{max-width:1480px;margin:0 auto;padding:14px 16px 32px}
+.warn{margin:0 0 14px;padding:10px 14px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-weight:700}
+.placeholder{text-align:center;padding:2.5rem 1rem;color:var(--muted)}
+.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px}
+.toolbar button{font:inherit;font-size:.8rem;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer}
+.toolbar button:hover{color:var(--accent);background:var(--accent-soft)}
+
+.section-header{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+/* Gruppenköpfe wie im Dosierungsrechner */
+.group-h,.sub-h{display:block;color:var(--accent);border-bottom:2px solid var(--accent);padding:4px 2px 6px;margin:18px 0 8px;font:700 .8rem var(--f-body);letter-spacing:.08em;text-transform:uppercase}
+.single-h{color:var(--muted);border-bottom-color:var(--line)}
+
+.chemo{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:6px;overflow:hidden}
+.chemo[open]{border-color:var(--accent)}
+.chemo summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px}
+.chemo summary::-webkit-details-marker{display:none}
+.chemo summary .chev{flex:none;width:16px;height:16px;color:var(--muted);transition:transform .15s}
+.chemo summary:hover .chev{color:var(--accent)}
+.chemo[open] summary .chev{transform:rotate(90deg)}
+.chemo-name{flex:1;min-width:0}
+.chemo-name b{display:block;font-size:1rem;line-height:1.2}
+.chemo-name small{display:block;color:var(--muted);font-size:.78rem;line-height:1.3;margin-top:1px}
+.chemo-total{font:600 1.2rem/1.1 var(--f-mono);color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.chemo-body{padding:0 12px 10px;border-top:1px solid var(--line)}
+.chemo-body .section-header{margin-top:12px}
+
+.row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:.86rem}
+.row:last-child{border-bottom:none}
+.row .desc{font-size:.74rem;color:var(--muted);margin-top:2px}
+.row .price{white-space:nowrap;font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.subtotal{display:flex;justify-content:space-between;padding-top:7px;margin-top:2px;border-top:2px solid var(--line);font-size:.86rem;font-weight:700}
+.subtotal span:first-child{color:var(--muted);font-size:.78rem}
+.subtotal span:last-child{font-family:var(--f-mono)}
+.note{display:block;width:fit-content;max-width:100%;font-size:.72rem;font-weight:700;background:var(--warn-bg);color:var(--warn);border-radius:5px;padding:1px 6px;margin-top:4px}
+.badge{display:inline-block;font-size:.68rem;padding:1px 6px;border-radius:5px;margin-left:6px;font-weight:700;vertical-align:middle}
+.badge-iv{background:var(--iv-bg);color:var(--iv-fg)}
+.badge-po{background:var(--po-bg);color:var(--po-fg)}
+.disclaimer{font-size:.8rem;color:var(--muted);margin-top:12px;max-width:75ch}
+
+@media (max-width:720px){
+  .brand p{display:none}
+  .brand h1{font-size:1.1rem}
+  .bar{padding-block:8px}
+  .bar-inner{gap:8px 14px}
+  .kof strong{font-size:1.1rem;padding:6px 0}
+}
+@media print{
+  body{background:#fff}
+  .bar{position:static}
+  .toolbar,.chev{display:none!important}
+  .chemo{break-inside:avoid}
+}
+/* Desktop: alles auf einen Blick – Ergebnisse in 4 Spalten */
+@media (min-width:1100px){
+  .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,1.35fr);gap:16px;align-items:start}
+  .chemo-total{font-size:1.05rem}
+  .chemo summary{padding:8px 10px}
+  .wrap{padding-top:10px}
+  .single-h{display:none}
+  .col > .sub-h,.col > .group-h{margin-top:0}
+  .toolbar{margin:-6px 0 6px}
+}
+@media (prefers-reduced-motion:reduce){.chemo summary .chev{transition:none}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-inner">
+    <div class="brand">
+      <h1>Kostenvoranschlag Chemotherapie</h1>
+      <p>Kosten pro Sitzung und Protokoll für Hund und Katze</p>
+    </div>
+    <div>
+      <span class="field-label" id="species-label">Tierart</span>
+      <div class="seg" role="group" aria-labelledby="species-label">
+        <button type="button" class="species-btn" data-species="hund" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm4-3a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm7 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm4 3a2 2 0 1 1 0-4 2 2 0 0 1 0 4ZM12 11c3 0 6 4.5 6 7a3 3 0 0 1-3 3c-1.2 0-2-.6-3-.6s-1.8.6-3 .6a3 3 0 0 1-3-3c0-2.5 3-7 6-7Z"/></svg>
+          Hund
+        </button>
+        <button type="button" class="species-btn" data-species="katze" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l3.2 4.2A8 8 0 0 1 12 6.5c1.4 0 2.7.3 3.8.7L19 3l.8 6.4A7.4 7.4 0 0 1 20 11c0 4.8-3.6 9-8 9s-8-4.2-8-9c0-.5 0-1.1.2-1.6L5 3Zm4 9a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm6 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg>
+          Katze
+        </button>
+      </div>
+    </div>
+    <div>
+      <label class="field-label" for="weight">Körpergewicht</label>
+      <div class="weight"><input id="weight" inputmode="decimal" autocomplete="off" placeholder="25,0"><span>kg</span></div>
+    </div>
+    <div class="kof" id="kof" hidden>
+      <span class="field-label">Körperoberfläche</span>
+      <strong id="kof-value"></strong>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="warn" id="warn" hidden></p>
+  <div id="results" aria-live="polite"></div>
+  <p class="disclaimer">Alle Angaben ohne Gewähr. Dosierungen immer durch Tierarzt überprüfen.</p>
+</main>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PREISE & STAMMDATEN – nur hier anpassen
+// ════════════════════════════════════════════════════════════════════════════
+
+// Cerenia Tabletten: Packung = 4 Tabletten (= 4 Tage), Tabletten teilbar.
+const CERENIA_PO_PACKS = [
+  {mg: 16,  price: 20.85},
+  {mg: 24,  price: 27.13},
+  {mg: 60,  price: 51.61},
+  {mg: 160, price: 70.98},
+];
+const CERENIA_PO_MG_PER_KG = 2;
+const CERENIA_IV = {mgPerKg: 1, mgPerMl: 10, pricePerMl: 11.03};
+
+const VINCRISTIN_VIAL_PRICE = 66.00;                 // Cellcristin 2 ml / 2 mg
+const DOXO = {mgPerMl: 2, pricePerMl: 17.09, surcharge: 2.38};   // Doxorubicin HCL Teva 2 mg/ml, Zuschlag je Gabe
+// Flaschen-Medikamente (nur Hund): Abrechnung pro Flasche, angebrochene Flasche 1 Monat haltbar.
+// days = Behandlungstage ab der 1. Gabe.
+const EPI = {
+  name: 'EPI-cell 50mg (Hexal) | Epirubicin (OP) - *Stada (OP25ml)',
+  bottlePrice: 200.22, bottleMl: 25, mgPerMl: 2, shelfDays: 30,
+  days: [0, 21, 42, 63, 84], schedule: '5 Gaben alle 3 Wochen',
+};
+const VINB = {
+  name: 'Vinblastin STADA® 10mg (OP) - *stadapharm (10ml)',
+  bottlePrice: 237.88, bottleMl: 10, mgPerMl: 1, shelfDays: 30, mgPerM2: 2,
+  days: [0, 7, 14, 21, 35, 49, 63, 77], schedule: '8 Gaben: 4× wöchentlich, dann 4× alle 2 Wochen',
+};
+const MITO = {
+  name: 'Mitoxantron 10mg Hexal (OP) - *Rebopharm (5ml)',
+  bottlePrice: 160.44, bottleMl: 5, mgPerMl: 2, shelfDays: 14, mgPerM2: 5,
+  days: [0, 21, 42, 63, 84], schedule: '5 Gaben alle 3 Wochen',
+};
+// Carboplatin: zwei Flaschengrößen (10 mg/ml), es wird die insgesamt günstigste Kombination gewählt.
+const CARBO = {
+  sizes: [
+    {name: 'Carbo-cell 150mg | Carboplatin (OP) - *Stada (OP15ml)', ml: 15, price: 111.69},
+    {name: 'Carbo-cell 450mg | Carboplatin (OP) - *Stada (OP45ml)', ml: 45, price: 290.07},
+  ],
+  mgPerMl: 10, shelfDays: 30, mgPerM2: 300,
+  days: [0, 21, 42, 63, 84], schedule: '5 Gaben alle 3 Wochen',
+};
+const VINB10 = {...VINB,
+  days: [0, 7, 14, 21, 28, 42, 56, 70, 84, 98], schedule: '10 Gaben: 5× wöchentlich, dann 5× alle 2 Wochen',
+};
+
+const CYCLO_TABS = [
+  {mg: 50, price: 12.75}, {mg: 25, price: 13.93},
+  {mg: 15, price: 13.32}, {mg: 12.5, price: 13.13},
+];
+const LOMUSTIN_CAPS = [
+  {mg: 40, price: 89.06}, {mg: 20, price: 53.79},
+  {mg: 10, price: 38.37}, {mg: 5, price: 27.28},
+];
+
+// Ab diesem Gewicht wird beim Hund nach KOF statt nach kg dosiert.
+const KOF_THRESHOLD_KG = 15;
+
+// ── Standardleistungen (gemeinsame Basis + Zusätze je Protokoll) ────────────
+// Format: [Bezeichnung, Einzelpreis, Anzahl (optional, Standard 1)]
+const STD_BASE = [
+  ['34 Folgeuntersuchung mit Beratung', 32.89],
+  ['627 Blutprobenentnahme venös', 17.09],
+  ['608 Aufbereitung von Blutproben', 45.15],
+  ['618 Großes Blutbild, maschinell', 39.18],
+  ['VBM ProCyte Hämatologie', 12.14],
+  ['143 | §8 Auswertung von Laborwerten einfach', 41.65],
+  ['VBM Sprechstunde', 6.56],
+  ['VBM Blutentnahme', 9.52],
+  ['1 | §8 Beratung über Laborbefunde', 18.76],
+];
+const STD_IV = [
+  ['Apo Chemo Herstellen', 107.10],
+  ['VBM Apo Chemo herstellen', 38.37],
+  ['225 Venenkatheter peripher einlegen', 24.36],
+  ['224 Injektion IV', 28.74, 2],
+  ['226 Venenkatheter entfernen', 10.98],
+];
+const STD = {
+  vincristin: [...STD_BASE, ...STD_IV,
+    ['VBM VCX', 35.06],
+    ['Isot. NaCl 0,9 % (20 ml)', 1.00]],
+  doxorubicin: [...STD_BASE, ...STD_IV,
+    ['609 Blutuntersuchung photometrisch', 15.38, 2],
+    ['Catalyst BUN Harnstoff-Stickstoff', 10.39],
+    ['Catalyst CREA Creatinin', 10.39],
+    ['VBM Catalyst One IDEXX', 6.19],
+    ['Medrate Solubile | Methylprednisolon', 30.66],
+    ['234 Infusion per Schwerkraft', 69.97],
+    ['Isot. NaCl 0,9 % (500 ml)', 4.94],
+    ['VBM Doxo', 35.06]],
+  tabletten: [...STD_BASE,
+    ['210 Eingeben von Medikamenten', 6.88],
+    ['VBM Zytostatika Tabletten', 11.57],
+    ['Praxis FeliGum Trojaner (St)', 2.42]],
+};
+// Carboplatin: wie Doxorubicin, aber Glucose 5 % statt NaCl 0,9 %
+STD.carboplatin = STD.doxorubicin.map(r => r[0] === 'Isot. NaCl 0,9 % (500 ml)' ? ['Glucose 5% EP 500ml', 4.40] : r);
+
+// ════════════════════════════════════════════════════════════════════════════
+//  HILFSFUNKTIONEN
+// ════════════════════════════════════════════════════════════════════════════
+const eur = new Intl.NumberFormat('de-DE', {style: 'currency', currency: 'EUR'});
+const num = (v, d) => v.toLocaleString('de-DE', {minimumFractionDigits: d, maximumFractionDigits: d});
+const cents = v => Math.round(v * 100) / 100;   // jede Position auf Cent runden, wie auf der Rechnung
+const sum = rows => cents(rows.reduce((a, r) => a + r.price, 0));
+
+// KOF nach Meeh: KOF (m²) = K × kg^(2/3) / 100 — Hund K = 10,1, Katze K = 10,0.
+// Ersetzt die Tabelle (hatte Tippfehler bei 22/33/47 kg und endete bei 50 kg bzw. 10 kg).
+function getKOF(kg, species) {
+  return (species === 'hund' ? 10.1 : 10.0) * Math.pow(kg, 2 / 3) / 100;
+}
+
+// Tabletten-/Kapselkombination: möglichst nah an der Zieldosis,
+// bei gleichem Abstand lieber abrunden, dann günstigster Preis.
+// Dynamische Programmierung über die mg-Menge (0,5-mg-Raster) statt Brute-Force.
+function bestTablets(target, sizes) {
+  const STEP = 2;                                  // 1 Einheit = 0,5 mg (wegen 12,5 mg)
+  const units = sizes.map(s => Math.round(s.mg * STEP));
+  const limit = Math.ceil(target * STEP) + Math.max(...units);
+  const cost = new Array(limit + 1).fill(Infinity);
+  const from = new Array(limit + 1).fill(-1);
+  cost[0] = 0;
+  for (let a = 1; a <= limit; a++) {
+    for (let i = 0; i < sizes.length; i++) {
+      const prev = a - units[i];
+      if (prev >= 0 && cost[prev] + sizes[i].price < cost[a] - 1e-9) {
+        cost[a] = cost[prev] + sizes[i].price;
+        from[a] = i;
+      }
+    }
+  }
+  let best = -1;
+  for (let a = 1; a <= limit; a++) {
+    if (cost[a] === Infinity) continue;
+    if (best < 0) { best = a; continue; }
+    const d = Math.abs(a / STEP - target), bd = Math.abs(best / STEP - target);
+    const under = a / STEP <= target, bUnder = best / STEP <= target;
+    if (d < bd - 1e-9 ||
+        (Math.abs(d - bd) < 1e-9 && under && !bUnder) ||
+        (Math.abs(d - bd) < 1e-9 && under === bUnder && cost[a] < cost[best] - 1e-9)) best = a;
+  }
+  const counts = sizes.map(() => 0);
+  for (let a = best; a > 0; a -= units[from[a]]) counts[from[a]]++;
+  const parts = sizes.map((s, i) => counts[i] ? `${counts[i]}× ${num(s.mg, s.mg % 1 ? 1 : 0)} mg` : '').filter(Boolean);
+  return {mg: best / STEP, price: cost[best], desc: parts.join(' + ')};
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  DOSIERUNG & MEDIKAMENTE
+// ════════════════════════════════════════════════════════════════════════════
+
+// Cerenia PO – Auswahl der Tabletten pro Tag:
+//   • nie unter 2 mg/kg, sonst so nah wie möglich an 2 mg/kg
+//   • höchstens 2 Tabletten pro Tag
+//   • entweder EINE Größe (auch halbe Tabletten: ½, 1, 1½, 2)
+//     oder ZWEI Größen mit je 1 ganzen Tablette (z. B. 16 mg + 24 mg)
+//   • bei gleicher Dosis: weniger Tabletten, dann günstiger
+// Kosten: immer ganze Packungen (à 4 Tbl.) für 4 Tage, z. B. 1½ Tbl./Tag = 6 Tbl. = 2 Packungen.
+function cereniaPO(kg) {
+  const target = CERENIA_PO_MG_PER_KG * kg;
+  const P = CERENIA_PO_PACKS;
+  const frac = n => ({0.5: '½', 1: '1', 1.5: '1½', 2: '2'})[n];
+  const options = [];
+  for (const p of P) for (const n of [0.5, 1, 1.5, 2])
+    options.push({mg: p.mg * n, tabs: n, packs: [[p, Math.ceil(n)]], desc: `${frac(n)} Tbl. ${p.mg} mg`});
+  for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++)
+    options.push({mg: P[i].mg + P[j].mg, tabs: 2, packs: [[P[i], 1], [P[j], 1]],
+                  desc: `je 1 Tbl. ${P[i].mg} mg + ${P[j].mg} mg`});
+  for (const o of options) o.price = o.packs.reduce((a, [p, k]) => a + p.price * k, 0);
+  const ok = options.filter(o => o.mg >= target - 1e-9);
+  const best = ok.length
+    ? ok.reduce((b, o) => (o.mg < b.mg - 1e-9 || (Math.abs(o.mg - b.mg) < 1e-9 &&
+        (o.tabs < b.tabs || (o.tabs === b.tabs && o.price < b.price)))) ? o : b)
+    : options.reduce((b, o) => o.mg > b.mg ? o : b);   // > 160 kg: größte mögliche Dosis
+  return {
+    name: 'Cerenia PO (Heimgabe 4 Tage)', route: 'PO', price: cents(best.price),
+    desc: `${best.desc} = ${num(best.mg, 1)} mg/Tag (${num(best.mg / kg, 2)} mg/kg) · ` +
+          best.packs.map(([p, k]) => `${k} Pckg. ${p.mg} mg`).join(' + '),
+  };
+}
+
+function cereniaIV(kg) {
+  const ml = kg * CERENIA_IV.mgPerKg / CERENIA_IV.mgPerMl;
+  return {
+    name: 'Cerenia IV (Maropitant)', route: 'IV', price: cents(ml * CERENIA_IV.pricePerMl),
+    desc: `${num(ml, 2)} ml (${CERENIA_IV.mgPerKg} mg/kg, ${CERENIA_IV.mgPerMl} mg/ml)`,
+  };
+}
+
+// Dosis-Basis: Hund ≥ 15 kg nach KOF, sonst nach kg (Katze immer nach kg).
+// Dosierung als kurzer Text für den Zusatz, z. B. "0,7 mg/m²" oder "0,025 mg/kg"
+const doseNum = v => v.toLocaleString('de-DE', {maximumFractionDigits: 3});
+function doseLabel(kg, species, perM2, perKg) {
+  return species === 'hund' && kg >= KOF_THRESHOLD_KG ? `${doseNum(perM2)} mg/m²` : `${doseNum(perKg)} mg/kg`;
+}
+
+function doseBasis(kg, kof, species, perM2, perKg) {
+  return species === 'hund' && kg >= KOF_THRESHOLD_KG
+    ? {mg: kof * perM2, basis: `${num(perM2, 1)} mg/m² × ${num(kof, 3)} m²`}
+    : {mg: kg * perKg, basis: `${num(perKg, 3)} mg/kg × ${num(kg, 1)} kg`};
+}
+
+function vincristin(kg, kof, species) {
+  // Hund und Katze gleich: unter 15 kg 0,025 mg/kg, ab 15 kg 0,7 mg/m²
+  const d = doseBasis(kg, kof, 'hund', 0.7, 0.025);
+  return {
+    name: 'Cellcristin 2 ml/2 mg (1 Flasche)', route: 'IV', price: VINCRISTIN_VIAL_PRICE,
+    desc: `berechnet: ${num(d.mg, 3)} mg · ${d.basis}`,
+  };
+}
+
+function doxorubicin(kg, kof, species) {
+  let d;
+  if (species === 'katze') {
+    // Katze: unter 15 kg 1 mg/kg, ab 15 kg 25 mg/m²
+    d = doseBasis(kg, kof, 'hund', 25, 1);
+  } else {
+    d = doseBasis(kg, kof, species, 30, 1);
+  }
+  const ml = d.mg / DOXO.mgPerMl;
+  return {
+    name: 'Doxorubicin HCL Teva 2 mg/ml', route: 'IV', price: cents(ml * DOXO.pricePerMl + DOXO.surcharge),
+    desc: `${num(ml, 2)} ml × ${eur.format(DOXO.pricePerMl)} + ${eur.format(DOXO.surcharge)} Zuschlag · ${num(d.mg, 2)} mg · ${d.basis}`,
+  };
+}
+
+// Cyclophosphamid: lieber ab- als aufrunden.
+//   • bis 5 % unter dem Ziel: möglichst wenige Tabletten, dann die höhere Dosis, dann günstiger
+//   • passt dort nichts (sehr kleine Tiere): Hinweis, dass der Tierarzt individuell
+//     entscheidet; Preis vorläufig für die nächstliegende Dosis
+// Mit maxDev = 0 liefert die Funktion die günstigste Kombination für genau diese Dosis.
+const MAX_DEVIATION = 0.05;
+function roundDownTablets(target, sizes, maxDev) {
+  const STEP = 2;                                  // 1 Einheit = 0,5 mg (wegen 12,5 mg)
+  const units = sizes.map(s => Math.round(s.mg * STEP));
+  const lo = Math.ceil(target * (1 - maxDev) * STEP - 1e-9);
+  const t = Math.floor(target * STEP + 1e-9);
+  const best = [{tabs: 0, price: 0, from: -1}];    // je Menge: wenigste Tabletten, dann günstigster Preis
+  for (let a = 1; a <= t; a++) {
+    best[a] = null;
+    sizes.forEach((s, i) => {
+      const p = best[a - units[i]];
+      if (!p) return;
+      const c = {tabs: p.tabs + 1, price: p.price + s.price, from: i};
+      if (!best[a] || c.tabs < best[a].tabs || (c.tabs === best[a].tabs && c.price < best[a].price - 1e-9)) best[a] = c;
+    });
+  }
+  let pick = -1;
+  for (let a = t; a >= Math.max(lo, 1); a--)       // von oben: bei gleicher Anzahl gewinnt die höhere Dosis
+    if (best[a] && (pick < 0 || best[a].tabs < best[pick].tabs)) pick = a;
+  if (pick < 0) return {...bestTablets(target, sizes),
+    note: 'Keine Kombination bis 5 % unter Ziel möglich – Dosierung individuell durch Tierarzt festlegen'};
+  const counts = sizes.map(() => 0);
+  for (let a = pick; a > 0; a -= units[best[a].from]) counts[best[a].from]++;
+  const parts = sizes.map((s, i) => counts[i] ? `${counts[i]}× ${num(s.mg, s.mg % 1 ? 1 : 0)} mg` : '').filter(Boolean);
+  return {mg: pick / STEP, price: best[pick].price, desc: parts.join(' + ')};
+}
+
+function cyclophosphamid(kg, kof, species) {
+  // Hund: unter 15 kg 10 mg/kg, ab 15 kg 250 mg/m² · Katze: unter 15 kg 10 mg/kg, ab 15 kg 200 mg/m²
+  const d = doseBasis(kg, kof, 'hund', species === 'katze' ? 200 : 250, 10);
+  const t = roundDownTablets(d.mg, CYCLO_TABS, MAX_DEVIATION);
+  return {
+    name: 'Cyclophosphamid Tabletten', route: 'PO', price: cents(t.price),
+    desc: `${t.desc} = ${num(t.mg, 1)} mg · Ziel ${num(d.mg, 1)} mg (${d.basis})`,
+    note: t.note || '',
+  };
+}
+
+// Lomustin (Kapseln in 5-mg-Schritten):
+//   Hund: auf den nächsten 5-mg-Schritt abrunden; fehlt bis zum nächsthöheren Schritt
+//         höchstens 1 mg, wird aufgerundet (z. B. 44,7 → 45 mg, aber 68,3 → 65 mg).
+//   Katze: Praxistabelle nach kg. Zwischengewichte (z. B. 5,5 kg): von den beiden Nachbarwerten
+//         die Dosis, die am nächsten an der Zieldosis liegt (bei Gleichstand die niedrigere).
+//         Ist es knapp (Zieldosis fast genau zwischen zwei 5-mg-Schritten, Abstände unterscheiden
+//         sich um weniger als 0,5 mg), entscheidet der Tierarzt.
+//         "null" bzw. Gewichte außerhalb der Tabelle = Rücksprache Tierarzt
+//         (Preis vorläufig nach der Hunde-Regel).
+const LOMUSTIN_ROUND_UP_MG = 1;
+const LOMUSTIN_CAT_TIE_MG = 0.5;
+const LOMUSTIN_CAT_TABLE = {2: 5, 3: 10, 4: 10, 5: 10, 6: null, 7: 15, 8: 15, 9: null, 10: null, 11: 20, 12: 20};
+const LOMUSTIN_VET_NOTE = 'Rücksprache Tierarzt – Dosierung individuell festlegen, Preis vorläufig';
+
+function lomustin(kg, kof, species, mgPerM2) {
+  const target = kof * mgPerM2;
+  let dose = Math.floor(target / 5) * 5;
+  if (dose + 5 - target <= LOMUSTIN_ROUND_UP_MG + 1e-9) dose += 5;
+  let note = dose < 5 ? LOMUSTIN_VET_NOTE : '', basis = '';
+  if (species === 'katze') {
+    const keys = [...new Set([Math.floor(kg), Math.ceil(kg)])];
+    const doses = keys.map(k => LOMUSTIN_CAT_TABLE[k]).filter(Boolean)
+      .sort((a, b) => Math.abs(a - target) - Math.abs(b - target) || a - b);
+    const lo5 = Math.floor(target / 5) * 5;
+    const tie = keys.length > 1 && Math.abs((target - lo5) - (lo5 + 5 - target)) < LOMUSTIN_CAT_TIE_MG;
+    if (doses.length && !tie) {
+      dose = doses[0];
+      basis = ` · Praxistabelle ${keys.map(k => num(k, 0)).join('–')} kg`;
+    } else note = LOMUSTIN_VET_NOTE;
+  }
+  dose = Math.max(dose, 5);
+  const t = roundDownTablets(dose, LOMUSTIN_CAPS, 0);
+  return {
+    name: 'Lomustin Kapseln', route: 'PO', price: cents(t.price),
+    desc: `${t.desc} = ${num(t.mg, 0)} mg · Ziel ${num(target, 1)} mg (${mgPerM2} mg/m² × ${num(kof, 3)} m²)${basis}`,
+    note,
+  };
+}
+
+// Flaschenplan: Reste einer angebrochenen Flasche werden für die nächsten Gaben genutzt (auch
+// zusammen mit einer neuen Flasche), solange die Flasche höchstens shelfDays offen ist.
+function bottlePlan(cfg, d) {
+  const ml = d.mg / cfg.mgPerMl;
+  let open = [];                                   // angebrochene Flaschen: {opened, left}
+  const gaben = cfg.days.map((day, i) => {
+    open = open.filter(b => day - b.opened <= cfg.shelfDays && b.left > 1e-9);
+    let need = ml, fromRest = 0, newBottles = 0;
+    for (const b of open) { const t = Math.min(b.left, need); b.left -= t; need -= t; fromRest += t; }
+    while (need > 1e-9) { const t = Math.min(cfg.bottleMl, need); open.push({opened: day, left: cfg.bottleMl - t}); need -= t; newBottles++; }
+    return {nr: i + 1, day, newBottles, fromRest};
+  });
+  const bottles = gaben.reduce((a, g) => a + g.newBottles, 0);
+  const plan = gaben.map(g => `${g.nr}. Gabe (Tag ${g.day}): ${[g.fromRest > 1e-9 ? `Rest ${num(g.fromRest, 2)} ml` : '', g.newBottles ? `${g.newBottles} neue Fl.` : ''].filter(Boolean).join(' + ')}`).join(' · ');
+  return {...d, ml, gaben, bottles, plan};
+}
+
+// Einzelsitzung = 1. Gabe mit Flaschenanbruch
+function bottleFirst(cfg, p) {
+  const n = p.gaben[0].newBottles;
+  return {
+    name: cfg.name, route: 'IV', price: cents(n * cfg.bottlePrice),
+    desc: `${n} × ${eur.format(cfg.bottlePrice)} pro Flasche (${cfg.bottleMl} ml) · Dosis ${num(p.ml, 2)} ml · ${num(p.mg, 2)} mg · ${p.basis}`,
+  };
+}
+
+// Protokoll: alle Sitzungen ohne das Medikament selbst + die tatsächlich benötigten Flaschen
+// Mehrere Flaschengrößen: günstigste Kombination über alle Gaben (Suche über alle sinnvollen
+// Möglichkeiten). Ein Rest ist nur bei der direkt folgenden Gabe nutzbar, wenn sie innerhalb von
+// shelfDays liegt. Flaschen werden erst geöffnet, wenn sie gebraucht werden.
+function multiBottlePlan(cfg, d, doses = cfg.days.length) {
+  const ml = d.mg / cfg.mgPerMl, S = cfg.sizes;
+  let best = null;
+  const picks = [];
+  (function rec(i, carry, cost, n) {
+    if (best && cost > best.cost + 1e-9) return;
+    if (i === doses) {
+      if (!best || cost < best.cost - 1e-9 || (Math.abs(cost - best.cost) < 1e-9 && n < best.n))
+        best = {cost, n, picks: picks.map(p => ({...p, counts: [...p.counts]}))};
+      return;
+    }
+    const need = Math.max(0, ml - carry), fromRest = Math.min(carry, ml);
+    const carryOk = i + 1 < doses && cfg.days[i + 1] - cfg.days[i] <= cfg.shelfDays;
+    if (need <= 1e-9) {
+      picks.push({counts: S.map(() => 0), fromRest}); rec(i + 1, 0, cost, n); picks.pop();
+      return;
+    }
+    const combos = [[]];
+    for (const s of S) {
+      const next = [];
+      for (const c of combos) for (let k = 0; k <= Math.ceil(need / s.ml); k++) next.push([...c, k]);
+      combos.splice(0, combos.length, ...next);
+    }
+    for (const c of combos) {
+      const vol = c.reduce((a, k, j) => a + k * S[j].ml, 0);
+      if (vol < need - 1e-9) continue;
+      if (c.some((k, j) => k > 0 && vol - S[j].ml >= need - 1e-9)) continue;   // eine Flasche zu viel
+      picks.push({counts: c, fromRest});
+      rec(i + 1, carryOk ? vol - need : 0, cost + c.reduce((a, k, j) => a + k * S[j].price, 0), n + c.reduce((a, k) => a + k, 0));
+      picks.pop();
+    }
+  })(0, 0, 0, 0);
+  const totals = S.map((_, j) => best.picks.reduce((a, p) => a + p.counts[j], 0));
+  const plan = best.picks.map((p, i) => `${i + 1}. Gabe (Tag ${cfg.days[i]}): ${[
+    p.fromRest > 1e-9 ? `Rest ${num(p.fromRest, 2)} ml` : '',
+    ...p.counts.map((k, j) => k ? `${k}× ${S[j].ml} ml` : ''),
+  ].filter(Boolean).join(' + ')}`).join(' · ');
+  return {...d, ml, picks: best.picks, totals, cost: best.cost, plan};
+}
+
+// Einzelsitzung: günstigste Flaschen für eine einzelne Gabe
+function multiBottleFirst(cfg, d) {
+  const p = multiBottlePlan(cfg, d, 1);
+  return cfg.sizes.map((s, j) => p.totals[j] ? {
+    name: s.name, route: 'IV', price: cents(p.totals[j] * s.price),
+    desc: `${p.totals[j]} × ${eur.format(s.price)} pro Flasche (${s.ml} ml) · Dosis ${num(p.ml, 2)} ml · ${num(p.mg, 1)} mg · ${p.basis}`,
+  } : null).filter(Boolean);
+}
+
+function multiBottleProtocol(title, cfg, p, session, ivAnti, poAnti) {
+  const n = cfg.days.length, perSession = cents(session.stdSum + ivAnti.price + poAnti.price);
+  const count = p.totals.reduce((a, k) => a + k, 0);
+  const bottles = cfg.sizes.map((s, j) => p.totals[j] ? {name: `${p.totals[j]}× ${s.name}`, route: 'IV',
+    desc: `${p.totals[j]} × ${eur.format(s.price)}`, price: cents(p.totals[j] * s.price)} : null).filter(Boolean);
+  bottles.at(-1).desc += ` · je Gabe ${num(p.ml, 2)} ml · ${p.plan}`;
+  return {title, tag: `${cfg.schedule} · ${count} Flasche${count === 1 ? '' : 'n'}`,
+    rows: [
+      {name: `${n}× ${title}-Sitzung (ohne Medikament)`,
+       desc: `${n} × ${eur.format(perSession)} (Standardleistungen, Cerenia IV + PO)`, price: cents(perSession * n)},
+      ...bottles,
+    ]};
+}
+
+function bottleProtocol(title, cfg, p, session, ivAnti, poAnti) {
+  const n = cfg.days.length, perSession = cents(session.stdSum + ivAnti.price + poAnti.price);
+  return {title, tag: `${cfg.schedule} · ${p.bottles} Flasche${p.bottles === 1 ? '' : 'n'}`,
+    rows: [
+      {name: `${n}× ${title}-Sitzung (ohne Medikament)`,
+       desc: `${n} × ${eur.format(perSession)} (Standardleistungen, Cerenia IV + PO)`, price: cents(perSession * n)},
+      {name: `${p.bottles}× ${cfg.name}`, route: 'IV',
+       desc: `${p.bottles} × ${eur.format(cfg.bottlePrice)} · je Gabe ${num(p.ml, 2)} ml · ${p.plan}`,
+       price: cents(p.bottles * cfg.bottlePrice)},
+    ]};
+}
+
+// ── Alle Protokolle für Spezies + Gewicht ───────────────────────────────────
+function buildEstimates(kg, species) {
+  const kof = getKOF(kg, species);
+  const ivAnti = cereniaIV(kg), poAnti = cereniaPO(kg);
+  const list = [
+    {id: 'vinc', title: 'Vincristin', tag: `IV · ${doseLabel(kg, 'hund', 0.7, 0.025)}`, std: STD.vincristin,
+     meds: [ivAnti, vincristin(kg, kof, species), poAnti]},
+    {id: 'doxo', title: 'Doxorubicin', tag: `IV · ${doseLabel(kg, 'hund', species === 'katze' ? 25 : 30, 1)}`, std: STD.doxorubicin,
+     meds: [ivAnti, doxorubicin(kg, kof, species), poAnti]},
+    {id: 'cyclo', title: 'Cyclophosphamid', tag: `PO · Tabletten · ${doseLabel(kg, 'hund', species === 'katze' ? 200 : 250, 10)}`, std: STD.tabletten,
+     meds: [cyclophosphamid(kg, kof, species), poAnti]},
+  ];
+  if (species === 'katze') {
+    list.push({id: 'lom60', title: 'Lomustin', tag: 'PO · 40 mg/m²', std: STD.tabletten,
+               meds: [lomustin(kg, kof, species, 40), poAnti]});
+  } else {
+    list.push({id: 'lom70', title: 'Lomustin', tag: 'PO · 70 mg/m²', std: STD.tabletten,
+               meds: [lomustin(kg, kof, species, 70), poAnti]});
+  }
+  // Carboplatin (300 mg/m²), Epirubicin (wie Doxorubicin), Mitoxantron (5 mg/m²), Vinblastin (2 mg/m²):
+  // nur Hund, Flaschenabrechnung
+  let epi = null, vinb = null, vinb10 = null, mito = null, carbo = null;
+  if (species === 'hund') {
+    epi = bottlePlan(EPI, doseBasis(kg, kof, 'hund', 30, 1));
+    const vinbDose = {mg: kof * VINB.mgPerM2, basis: `${VINB.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
+    vinb = bottlePlan(VINB, vinbDose);
+    vinb10 = bottlePlan(VINB10, vinbDose);
+    list.push({id: 'epi', title: 'Epirubicin', tag: `IV · ${doseLabel(kg, species, 30, 1)} · 1. Gabe mit Flaschenanbruch`, std: STD.doxorubicin,
+               meds: [ivAnti, bottleFirst(EPI, epi), poAnti]});
+    const carboDose = {mg: kof * CARBO.mgPerM2, basis: `${CARBO.mgPerM2} mg/m² × ${num(kof, 3)} m²`};
+    carbo = multiBottlePlan(CARBO, carboDose);
+    list.push({id: 'carbo', title: 'Carboplatin', tag: `IV · ${CARBO.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.carboplatin,
+               meds: [ivAnti, ...multiBottleFirst(CARBO, carboDose), poAnti]});
+    mito = bottlePlan(MITO, {mg: kof * MITO.mgPerM2, basis: `${MITO.mgPerM2} mg/m² × ${num(kof, 3)} m²`});
+    list.push({id: 'mito', title: 'Mitoxantron', tag: `IV · ${MITO.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.doxorubicin,
+               meds: [ivAnti, bottleFirst(MITO, mito), poAnti]});
+    list.push({id: 'vinb', title: 'Vinblastin', tag: `IV · ${VINB.mgPerM2} mg/m² · 1. Gabe mit Flaschenanbruch`, std: STD.vincristin,
+               meds: [ivAnti, bottleFirst(VINB, vinb), poAnti]});
+  }
+  for (const e of list) {
+    e.stdRows = e.std.map(([name, price, qty = 1]) => ({
+      name: qty > 1 ? `${name} (×${qty})` : name,
+      price: cents(price * qty),
+      desc: qty > 1 ? `${qty} × ${eur.format(price)}` : '',
+    }));
+    e.stdSum = sum(e.stdRows);
+    e.medSum = sum(e.meds);
+    e.total = cents(e.stdSum + e.medSum);
+    e.individual = e.meds.some(m => m.note);
+  }
+  // Protokolle: Summe der Sitzungen (je inkl. Standardleistungen und Cerenia).
+  // LOPP (nur Hund): Lomustin gibt der Besitzer am Folgetag zu Hause → nur die Kapseln, keine Sitzung.
+  const s = id => list.find(e => e.id === id);
+  const protocols = [
+    {title: 'CHOP', tag: 'B-Zell Lymphom · 12 Wochen · je 4× Vincristin, Cyclophosphamid, Doxorubicin',
+     parts: [[s('vinc'), 4], [s('cyclo'), 4], [s('doxo'), 4]]},
+  ];
+  if (species === 'hund') protocols.push(
+    {title: 'LOPP', tag: 'T-Zell Lymphom · 24 Wochen · alle 2 Wochen Vincristin (12×), alle 4 Wochen Lomustin 60 mg/m² als Heimgabe (6×)',
+     parts: [[s('vinc'), 12], [lomustin(kg, kof, species, 60), 6]]});   // nur Kapseln, keine Einzelsitzung
+  if (epi) protocols.push(bottleProtocol('Epirubicin', EPI, epi, s('epi'), ivAnti, poAnti));
+  if (carbo) protocols.push(multiBottleProtocol('Carboplatin', CARBO, carbo, s('carbo'), ivAnti, poAnti));
+  if (mito) protocols.push(bottleProtocol('Mitoxantron', MITO, mito, s('mito'), ivAnti, poAnti));
+  if (vinb) protocols.push(bottleProtocol('Vinblastin', VINB, vinb, s('vinb'), ivAnti, poAnti));
+  if (vinb10) protocols.push(bottleProtocol('Vinblastin', VINB10, vinb10, s('vinb'), ivAnti, poAnti));
+  for (const p of protocols) {
+    if (!p.rows) p.rows = p.parts.map(([e, n]) => e.total !== undefined
+      ? {name: `${n}× ${e.title}-Sitzung`, desc: `${n} × ${eur.format(e.total)} (${e.tag})`,
+         price: cents(e.total * n), note: e.individual ? 'Dosierung individuell durch Tierarzt' : ''}
+      : {name: `${n}× ${e.name} (Heimgabe, nur Kapseln)`, desc: `${n} × ${eur.format(e.price)} · ${e.desc}`,
+         price: cents(e.price * n), note: e.note});
+    p.total = sum(p.rows);
+    p.individual = p.rows.some(r => r.note);
+  }
+  // Anzeige alphabetisch (bei gleichem Namen nach Untertitel, z. B. Lomustin B- vor T-Zell)
+  const byName = (x, y) => x.title.localeCompare(y.title, 'de') || x.tag.localeCompare(y.tag, 'de', {numeric: true});
+  list.sort(byName);
+  protocols.sort(byName);
+  return {kof, list, protocols};
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  UI
+// ════════════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+let species = 'hund';
+const openState = new Set();   // aufgeklappte Karten über Neuberechnungen hinweg merken
+
+const rowHtml = r => `<div class="row"><div>${r.name}${r.route ? `<span class="badge badge-${r.route.toLowerCase()}">${r.route}</span>` : ''}${r.desc ? `<div class="desc">${r.desc}</div>` : ''}${r.note ? `<div class="note">${r.note}</div>` : ''}</div><div class="price">${eur.format(r.price)}</div></div>`;
+const block = (title, rows, total) => `<p class="section-header">${title}</p>${rows.map(rowHtml).join('')}<div class="subtotal"><span>Zwischensumme</span><span>${eur.format(total)}</span></div>`;
+
+// Einzelsitzungen nach Verabreichungsart gruppiert (innerhalb der Gruppe alphabetisch)
+const ROUTE_GROUPS = [
+  ['Orale Chemotherapie', ['cyclo', 'lom70', 'lom60']],
+  ['Intravenöse Injektion', ['vinb', 'vinc']],
+  ['Intravenöse Infusion', ['carbo', 'doxo', 'epi', 'mito']],
+];
+
+function cardHtml(e, body) {
+  const key = e.title + e.tag;
+  return `<details class="card chemo" data-key="${key}"${openState.has(key) ? ' open' : ''}>
+        <summary><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="chemo-name"><b>${e.title}</b><small>${e.tag}</small>${e.individual ? '<span class="note">Dosierung individuell durch Tierarzt – Preis vorläufig</span>' : ''}</span>
+          <span class="chemo-total">${eur.format(e.total)}</span></summary>
+        <div class="chemo-body">
+          ${body}
+        </div></details>`;
+}
+
+function render() {
+  const kg = parseFloat(String($('weight').value).replace(',', '.'));
+  const warn = $('warn');
+  warn.hidden = true;
+
+  if (!(kg > 0)) {
+    $('kof').hidden = true;
+    $('results').innerHTML = `<div class="placeholder">Spezies wählen und Gewicht eingeben</div>`;
+    return;
+  }
+  if ((species === 'katze' && kg > 15) || kg > 100) {
+    warn.textContent = `Ungewöhnliches Gewicht für ${species === 'katze' ? 'eine Katze' : 'einen Hund'} – bitte Eingabe prüfen.`;
+    warn.hidden = false;
+  }
+
+  const {kof, list, protocols} = buildEstimates(kg, species);
+  $('kof-value').textContent = `${num(kof, 3)} m²`;
+  $('kof').hidden = false;
+
+  $('results').innerHTML =
+    `<div class="toolbar"><button type="button" id="toggle-all">Alle aufklappen</button><button type="button" onclick="print()">Drucken</button></div>` +
+    `<div class="cols"><p class="section-header group-h single-h">Einzelsitzungen</p>` +
+    ROUTE_GROUPS.map(([label, ids]) => {
+      const items = list.filter(e => ids.includes(e.id));
+      return items.length ? `<section class="col"><p class="sub-h">${label}</p>` +
+        items.map(e => cardHtml(e, block('Medikamente', e.meds, e.medSum) + block('Standardleistungen', e.stdRows, e.stdSum))).join('') + '</section>' : '';
+    }).join('') +
+    `<section class="col col-prot"><p class="section-header group-h">Protokolle – Gesamtkosten</p>` +
+    protocols.map(p => cardHtml(p, block('Sitzungen', p.rows, p.total))).join('') + '</section></div>' +
+    `<p class="disclaimer">Einzelsitzungen inkl. Cerenia und Standardleistungen; Protokolle = Summe der Einzelsitzungen · ${species === 'hund' ? 'Hund' : 'Katze'}, ${num(kg, 1)} kg</p>`;
+
+  const all = [...document.querySelectorAll('.chemo')];
+  all.forEach(d => d.addEventListener('toggle', () => {
+    d.open ? openState.add(d.dataset.key) : openState.delete(d.dataset.key);
+  }));
+  $('toggle-all').addEventListener('click', () => {
+    const open = !all.every(d => d.open);
+    all.forEach(d => { d.open = open; });
+  });
+}
+
+document.querySelectorAll('.species-btn').forEach(btn => btn.addEventListener('click', () => {
+  species = btn.dataset.species;
+  document.querySelectorAll('.species-btn').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  document.body.classList.toggle('cat', species === 'katze');
+  $('weight').placeholder = species === 'hund' ? '25,0' : '4,5';
+  render();
+}));
+$('weight').addEventListener('input', render);
+// Beim Drucken alle Details zeigen
+addEventListener('beforeprint', () => document.querySelectorAll('.chemo').forEach(d => { d.open = true; }));
+render();
+</script>
+</body>
+</html>
