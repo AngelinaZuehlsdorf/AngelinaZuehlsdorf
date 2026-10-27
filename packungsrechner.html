@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+</style>
+<title>Packungsrechner Praxisapotheke</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: zwei Spalten – links Eingabe (Präparat → Stärke → Dosierung), rechts das Ergebnis als Abgabezettel. Unter 860px gestapelt. */
+:root {
+  --bg: #f3f7f6;
+  --surface: #ffffff;
+  --sunk: #eaf1ef;
+  --ink: #11211e;
+  --muted: #566a65;
+  --line: #d3dfdb;
+  --accent: #0b6a5f;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefea;
+  --warn: #8f5300;
+  --warn-soft: #fbefd9;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1514; --surface: #141f1d; --sunk: #101917; --ink: #e2edea; --muted: #93a8a3; --line: #283a36;
+    --accent: #52c3b0; --accent-ink: #062320; --accent-soft: #173430; --warn: #f2b65c; --warn-soft: #33270f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1514; --surface: #141f1d; --sunk: #101917; --ink: #e2edea; --muted: #93a8a3; --line: #283a36;
+  --accent: #52c3b0; --accent-ink: #062320; --accent-soft: #173430; --warn: #f2b65c; --warn-soft: #33270f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+header h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.7rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 18px; min-width: 0; }
+.step { display: grid; gap: 8px; min-width: 0; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+input, select, button { font: inherit; color: inherit; }
+input[type="text"], input[type="number"], select {
+  background: var(--sunk); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; width: 100%; min-width: 0;
+}
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.list { border: 1px solid var(--line); border-radius: 7px; max-height: 270px; overflow-y: auto; background: var(--sunk); }
+.list button {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; width: 100%; text-align: left; background: none; border: 0;
+  border-bottom: 1px solid var(--line); padding: 8px 11px; cursor: pointer;
+}
+.list button:last-child { border-bottom: 0; }
+.list button:hover { background: var(--accent-soft); }
+.list button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.list .n { font-weight: 700; min-width: 0; }
+.list .w { grid-column: 1; font-size: 0.85rem; opacity: 0.75; min-width: 0; }
+.list .c { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-family: var(--font-mono); font-size: 0.75rem; opacity: 0.7; }
+.empty { padding: 14px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--line); background: var(--sunk); border-radius: 7px; padding: 7px 11px; cursor: pointer; text-align: left;
+  display: grid; gap: 1px;
+}
+.chip b { font-weight: 700; }
+.chip small { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip[aria-pressed="true"] small { color: inherit; opacity: 0.8; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row > * { flex: 1 1 120px; }
+.row .narrow { flex: 0 1 110px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; flex: 0 0 auto; }
+.seg button { border: 0; background: var(--sunk); padding: 8px 12px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.hint { font-size: 0.85rem; color: var(--muted); }
+
+/* Ergebnis */
+.result { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+@media (max-width: 860px) { .result { position: static; } }
+.need { display: grid; gap: 2px; }
+.need .big { font-family: var(--font-display); font-weight: 700; font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.need .calc { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
+.rec { background: var(--accent); color: var(--accent-ink); border-radius: 9px; padding: 16px; display: grid; gap: 6px; }
+.rec .eyebrow { font-family: var(--font-display); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; }
+.rec .packs { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; line-height: 1.25; }
+.rec .sub { font-size: 0.9rem; opacity: 0.9; }
+.alt { border: 1px dashed var(--line); border-radius: 9px; padding: 12px 14px; font-size: 0.92rem; }
+.alt b { font-weight: 700; }
+.note { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; }
+.note + .note { margin-top: -10px; }
+.sig { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
+.sig code { font-family: var(--font-mono); font-size: 0.82rem; flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; flex: 0 0 auto; }
+.btn:hover { border-color: var(--accent); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-family: var(--font-display); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--sunk); }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+tr.cur td { background: var(--accent-soft); }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--accent-soft); }
+footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
+@media (prefers-reduced-motion: no-preference) { .chip, .list button, .seg button { transition: background-color .12s; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Packungsrechner</h1>
+    <p>Präparat wählen, Dosierung und Dauer eingeben – der Rechner ermittelt den Gesamtbedarf und die passende Packungskombination aus dem Praxissortiment.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Eingabe">
+      <div class="step">
+        <div class="label"><span>Präparat</span><span id="count"></span></div>
+        <input type="text" id="search" placeholder="Name oder Wirkstoff suchen, z. B. Apoquel, Prednisolon …" autocomplete="off">
+        <div class="list" id="list" role="listbox" aria-label="Präparate"></div>
+      </div>
+
+      <div class="step">
+        <div class="label"><span>Stärke / Variante</span></div>
+        <div class="chips" id="variants"></div>
+      </div>
+
+      <div class="step">
+        <div class="label"><span>Dosierung pro Gabe</span></div>
+        <div class="row">
+          <input type="number" id="dose" min="0" step="any" inputmode="decimal" aria-label="Dosis">
+          <select id="doseMode" aria-label="Einheit der Dosis"></select>
+        </div>
+        <div class="row" id="weightRow" hidden>
+          <label class="hint narrow" for="weight">Körpergewicht</label>
+          <input type="number" id="weight" min="0" step="any" inputmode="decimal" placeholder="kg">
+          <span class="hint narrow">kg</span>
+        </div>
+        <div class="row" id="splitRow" hidden>
+          <span class="hint narrow">Tabletten</span>
+          <div class="seg" id="split" role="group" aria-label="Teilbarkeit">
+            <button type="button" data-v="1">nur ganz</button>
+            <button type="button" data-v="2">½</button>
+            <button type="button" data-v="4">¼</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="label"><span>Häufigkeit</span></div>
+        <div class="row">
+          <select id="freq" aria-label="Häufigkeit">
+            <option value="d4">4× täglich</option>
+            <option value="d3">3× täglich</option>
+            <option value="d2">2× täglich</option>
+            <option value="d1">1× täglich</option>
+            <option value="i2">jeden 2. Tag</option>
+            <option value="i7">1× wöchentlich</option>
+            <option value="i14">alle 2 Wochen</option>
+            <option value="i28">alle 4 Wochen</option>
+            <option value="i30">1× monatlich</option>
+            <option value="i84">alle 12 Wochen</option>
+            <option value="custom">alle … Tage</option>
+            <option value="once">einmalig</option>
+          </select>
+          <input type="number" id="customDays" class="narrow" min="1" step="1" value="3" aria-label="Intervall in Tagen" hidden>
+        </div>
+      </div>
+
+      <div class="step" id="durStep">
+        <div class="label"><span>Dauer der Gabe</span></div>
+        <div class="row">
+          <input type="number" id="dur" min="1" step="1" inputmode="numeric" aria-label="Dauer">
+          <select id="durUnit" aria-label="Einheit der Dauer">
+            <option value="1">Tage</option>
+            <option value="7">Wochen</option>
+            <option value="30">Monate (à 30 Tage)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel result" aria-label="Ergebnis" aria-live="polite" id="result"></section>
+  </div>
+
+  <footer>
+    Datengrundlage: Sortimentsliste „Tierarzt-Preise“ (6 Seiten). Packungsgrößen und Stärken stammen aus den Artikelbezeichnungen; Konzentrationen sind nur hinterlegt, wo sie in der Bezeichnung stehen. Ohne Konzentration wird in Stück, ml oder g gerechnet. Die Liste enthält keine Preise, daher empfiehlt der Rechner die Kombination mit dem geringsten Überschuss. Dosierungen bitte immer anhand der Fachinformation prüfen.
+  </footer>
+</div>
+
+<script>
+// ---------- Sortiment ----------
+// n Name · w Wirkstoff · h Bezug · u Einheit · su Stärkeeinheit · sp Teilbarkeit · iv Standardintervall (Tage) · loose lose Abgabe
+// v: Varianten { l Bezeichnung, s Stärke pro Einheit, p Packungsgrößen (Zahl oder [Größe, Hinweis]) }
+const DATA = [
+ {n:"Advocate Spot-on Hund", w:"Imidacloprid / Moxidectin", h:"Elanco", u:"Pip", iv:28, v:[{l:"4–10 kg (100 mg)",p:[3]},{l:"10–25 kg (250 mg)",p:[3]},{l:"25–40 kg (400 mg)",p:[3]}]},
+ {n:"Apoquel Filmtabletten", w:"Oclacitinib", h:"Zoetis", u:"Tbl", su:"mg", v:[{s:3.6,p:[50,100]}]},
+ {n:"Apoquel Kautabletten", w:"Oclacitinib", h:"Zoetis", u:"Tbl", su:"mg", v:[{s:3.6,p:[20]},{s:5.4,p:[20,100]},{s:16,p:[20,50,100]}]},
+ {n:"Atenolol Stada", w:"Atenolol", h:"Stadapharm", u:"Tbl", su:"mg", v:[{s:25,p:[100]}]},
+ {n:"Atopica Kapseln", w:"Ciclosporin", h:"Elanco", u:"Kap", su:"mg", v:[{s:50,p:[30]},{s:100,p:[30]}]},
+ {n:"Atopica orale Lösung", w:"Ciclosporin", h:"Elanco", u:"ml", su:"mg", v:[{s:100,p:[5,17]}]},
+ {n:"Baytril 2,5 % Inj.-Lösung Hund/Katze", w:"Enrofloxacin", h:"Elanco", u:"ml", su:"mg", v:[{s:25,p:[]}]},
+ {n:"Baytril Flavour 2,5 % orale Susp. Katze", w:"Enrofloxacin", h:"Elanco", u:"ml", su:"mg", v:[{s:25,p:[]}]},
+ {n:"Bepanthen Augensalbe", w:"", h:"Rebopharm", u:"g", v:[{p:[5]}]},
+ {n:"Bonqat orale Lösung Katze", w:"Pregabalin", h:"TVM", u:"ml", su:"mg", v:[{s:50,p:[2]}]},
+ {n:"Bravecto Kautabletten Hund", w:"Fluralaner", h:"MSD / Rebopharm", u:"Tbl", sp:1, iv:84, v:[{l:"2–4,5 kg (112,5 mg)",p:[2]},{l:"4,5–10 kg (250 mg)",p:[2]},{l:"10–20 kg (500 mg)",p:[2]},{l:"20–40 kg (1000 mg)",p:[2]}]},
+ {n:"Bravecto Spot-on Katze", w:"Fluralaner", h:"MSD / Rebopharm", u:"Pip", iv:84, v:[{l:">2,8–6,25 kg (250 mg)",p:[2]}]},
+ {n:"Buscopan Dragées", w:"Butylscopolaminiumbromid", h:"Rebopharm", u:"Tbl", su:"mg", sp:1, v:[{s:10,p:[50]}]},
+ {n:"Buscopan Plus Zäpfchen", w:"Butylscopolaminiumbromid / Paracetamol", h:"Rebopharm", u:"Supp", v:[{l:"10 mg / 800 mg",p:[10]}]},
+ {n:"Canergy", w:"Propentofyllin", h:"Dechra", u:"Tbl", su:"mg", v:[{s:100,p:[100]}]},
+ {n:"Caninsulin 40 I.E./ml", w:"Insulin", h:"MSD", u:"ml", su:"I.E.", v:[{s:40,p:[10]}]},
+ {n:"Caninsulin VetPen Patronen", w:"Insulin", h:"MSD", u:"ml", su:"I.E.", v:[{s:40,p:[[27,"10 Patronen à 2,7 ml"]]}]},
+ {n:"Cardalis", w:"Benazepril / Spironolacton", h:"Ceva", u:"Tbl", v:[{l:"2,5/20 mg",p:[90]},{l:"5/40 mg",p:[90]},{l:"10/80 mg",p:[90]}]},
+ {n:"Cardisure Flavour", w:"Pimobendan", h:"Dechra", u:"Tbl", su:"mg", v:[{s:1.25,p:[100]},{s:2.5,p:[100]},{s:5,p:[100]},{s:10,p:[100]}]},
+ {n:"Cefatab Flavour", w:"Cefalexin", h:"CP-Pharma", u:"Tbl", su:"mg", v:[{s:250,p:[100]},{s:500,p:[100]}]},
+ {n:"Cefenicol CA Augentropfen", w:"Chloramphenicol", h:"CP-Pharma", u:"ml", su:"mg", v:[{s:5,p:[10]}]},
+ {n:"Cellondan", w:"Ondansetron", h:"Stadapharm", u:"Tbl", su:"mg", v:[{s:8,p:[10]}]},
+ {n:"Cepemycin CTC Salbe", w:"Chlortetracyclin", h:"CP-Pharma", u:"g", su:"mg", v:[{s:10,p:[5]}]},
+ {n:"Cerenia Tabletten", w:"Maropitant", h:"Zoetis", u:"Tbl", su:"mg", v:[{s:16,p:[4]},{s:24,p:[4]},{s:60,p:[4]},{s:160,p:[4]}]},
+ {n:"Cimalgex", w:"Cimicoxib", h:"Selectavet", u:"Tbl", su:"mg", v:[{s:80,p:[45]}]},
+ {n:"Clavusan", w:"Amoxicillin / Clavulansäure", h:"Dechra", u:"Tbl", su:"mg", v:[{l:"50/12,5 mg",s:62.5,p:[10]}]},
+ {n:"Clindabactin Kautabletten", w:"Clindamycin", h:"Dechra", u:"Tbl", su:"mg", v:[{s:440,p:[10]}]},
+ {n:"Clomicalm", w:"Clomipramin", h:"Virbac", u:"Tbl", su:"mg", v:[{s:20,p:[30]}]},
+ {n:"Clopidogrel Stada", w:"Clopidogrel", h:"Stadapharm", u:"Tbl", su:"mg", v:[{s:75,p:[28]}]},
+ {n:"CLX Wipes Pocket", w:"", h:"Livisto", u:"Stk", v:[{p:[20]}]},
+ {n:"Cortavance Spray", w:"Hydrocortisonaceponat", h:"Virbac", u:"ml", su:"mg", v:[{s:0.584,p:[31,76]}]},
+ {n:"Credelio Katze", w:"Lotilaner", h:"Elanco", u:"Tbl", sp:1, iv:30, v:[{l:"48 mg",p:[3]}]},
+ {n:"Cyclavance", w:"Ciclosporin", h:"Virbac", u:"ml", v:[{p:[5,15,30,50]}]},
+ {n:"Denticur RF2 Zahnpasta", w:"", h:"Dechra", u:"g", v:[{p:[70]}]},
+ {n:"Dexavet Augentropfen", w:"Dexamethason", h:"CP-Pharma", u:"ml", su:"mg", v:[{s:1,p:[5]}]},
+ {n:"Diazepam Desitin rectal tube", w:"Diazepam", h:"Desitin / Rebopharm", u:"Rektaltube", su:"mg", v:[{s:10,p:[5]}]},
+ {n:"Diazepam-ratiopharm Suppositorien", w:"Diazepam", h:"Rebopharm", u:"Supp", su:"mg", v:[{s:10,p:[5]}]},
+ {n:"Dibenzyran", w:"Phenoxybenzamin", h:"City Apotheke", u:"Kap", su:"mg", v:[{s:10,p:[30]}]},
+ {n:"Douxo S3 Pyo Mousse", w:"", h:"Ceva", u:"ml", v:[{p:[150]}]},
+ {n:"Douxo S3 Pyo Pads", w:"", h:"Ceva", u:"Stk", v:[{p:[30]}]},
+ {n:"Douxo S3 Pyo Shampoo", w:"", h:"Ceva", u:"ml", v:[{p:[200]}]},
+ {n:"Doxybactin", w:"Doxycyclin", h:"Dechra", u:"Tbl", su:"mg", v:[{s:50,p:[10]},{s:200,p:[10]}]},
+ {n:"Duo Tox Liquid", w:"Pflanzliche Kohle", h:"alfavet", u:"ml", v:[{p:[110]}]},
+ {n:"DuOtic", w:"Terbinafin / Betamethason", h:"Dechra", u:"Tube", v:[{l:"10 mg/1 mg",p:[20]}]},
+ {n:"Easotic", w:"", h:"Virbac / Rebopharm", u:"ml", v:[{p:[10]}]},
+ {n:"EinsAlpha Tropfen", w:"Alfacalcidol", h:"Rebopharm", u:"ml", su:"µg", v:[{s:2,p:[20]}]},
+ {n:"Eluracat", w:"Capromorelin", h:"Elanco", u:"ml", su:"mg", v:[{s:20,p:[15]}]},
+ {n:"Emesan", w:"Diphenhydramin", h:"Rebopharm", u:"Tbl", su:"mg", v:[{s:50,p:[50]}]},
+ {n:"Enrocat Flavour", w:"Enrofloxacin", h:"Livisto", u:"ml", su:"mg", v:[{s:25,p:[8.5]}]},
+ {n:"Enrotab", w:"Enrofloxacin", h:"CP-Pharma", u:"Tbl", su:"mg", v:[{l:"50 mg Ktz/Hd",s:50,p:[20]},{l:"150 mg Hd",s:150,p:[20]}]},
+ {n:"Enurace", w:"Ephedrin", h:"Ecuphar", u:"Tbl", su:"mg", v:[{s:10,p:[60]},{s:50,p:[100]}]},
+ {n:"Eradia", w:"Metronidazol", h:"Virbac", u:"ml", su:"mg", v:[{s:125,p:[30]}]},
+ {n:"Ermidra Spray", w:"", h:"Livisto / Rebopharm", u:"ml", v:[{p:[300]}]},
+ {n:"Felimazole Tabletten", w:"Thiamazol", h:"Dechra", u:"Tbl", su:"mg", sp:1, v:[{s:1.25,p:[100]},{s:2.5,p:[100]},{s:5,p:[100]}]},
+ {n:"Felimazole SA Lösung", w:"Thiamazol", h:"Dechra", u:"ml", su:"mg", v:[{s:5,p:[30,100]}]},
+ {n:"Fenbenol Injektor", w:"Fenbendazol", h:"CP-Pharma", u:"ml", su:"mg", v:[{s:100,p:[[7.5,"Injektor à 7,5 ml"]]}]},
+ {n:"Folsan", w:"Folsäure", h:"Rebopharm", u:"Tbl", su:"mg", v:[{s:5,p:[100]}]},
+ {n:"Fortekor", w:"Benazepril", h:"Elanco", u:"Tbl", su:"mg", v:[{l:"Gourmet 2,5 mg · 2,5–10 kg",s:2.5,p:[56]},{l:"Flavour 5 mg · 10–20 kg",s:5,p:[56]},{l:"Flavour 20 mg · 20–80 kg",s:20,p:[56]}]},
+ {n:"Forthyron", w:"Levothyroxin-Natrium", h:"Dechra", u:"Tbl", su:"µg", v:[{l:"Flavour 200 µg",s:200,p:[250]},{l:"Flavour 400 µg",s:400,p:[250]},{l:"400 µg",s:400,p:[250]},{l:"Flavour 600 µg",s:600,p:[250]}]},
+ {n:"Furotab", w:"Furosemid", h:"CP-Pharma", u:"Tbl", su:"mg", v:[{s:10,p:[20,100]},{s:40,p:[20,100]}]},
+ {n:"Gabapentin Kapseln", w:"Gabapentin", h:"1A Pharma / AL / ABZ / Stada / ratiopharm", u:"Kap", su:"mg", v:[{s:100,p:[[20,"1A Pharma"],[100,"AL / Stada"]]},{s:300,p:[[50,"Stada / ratiopharm"],[100,"ABZ / Stada"]]}]},
+ {n:"Galliprant", w:"Grapiprant", h:"Elanco", u:"Tbl", su:"mg", v:[{s:60,p:[30]}]},
+ {n:"Glucantime", w:"Megluminantimonat", h:"Rebopharm (Boehringer)", u:"Amp", v:[{l:"Ampulle à 5 ml",p:[5]}]},
+ {n:"Hepar comp. PlantaVet", w:"", h:"WDT / rebovet", u:"Stk", v:[{p:[]}]},
+ {n:"Herbax Zahnpflege", w:"", h:"CP-Pharma", u:"g", v:[{p:[70]}]},
+ {n:"Hexarinse Spüllösung", w:"", h:"Virbac", u:"ml", v:[{p:[237]}]},
+ {n:"Hexasolvon Pulver", w:"Bromhexin", h:"CP-Pharma", u:"g", su:"mg", v:[{s:10,p:[50,1000]}]},
+ {n:"HexoCare Zahnpflege Gel", w:"", h:"Alfavet", u:"ml", v:[{p:[50]}]},
+ {n:"Humulin Normal Pen", w:"Insulin", h:"City Apotheke", u:"ml", v:[{p:[]}]},
+ {n:"Imaverol", w:"Enilconazol", h:"Ecuphar / Selectavet", u:"ml", v:[{p:[100]}]},
+ {n:"Incurin", w:"", h:"MSD", u:"Tbl", su:"mg", v:[{s:1,p:[30]}]},
+ {n:"Inhalation Rezeptur (Ter/Euc/Pfe/Eth)", w:"", h:"City Apotheke", u:"g", v:[{p:[50]}]},
+ {n:"Isaderm Gel", w:"Fusidinsäure", h:"Dechra", u:"g", v:[{p:[15]}]},
+ {n:"Isemid", w:"Torasemid", h:"Ceva", u:"Tbl", su:"mg", v:[{s:2,p:[90]}]},
+ {n:"Itrafungol", w:"Itraconazol", h:"Virbac", u:"ml", su:"mg", v:[{s:10,p:[52]}]},
+ {n:"Laktostop", w:"Cabergolin", h:"CP-Pharma", u:"ml", v:[{p:[10,15,25]}]},
+ {n:"Leisguard", w:"Domperidon", h:"Ecuphar", u:"ml", su:"mg", v:[{s:5,p:[60]}]},
+ {n:"Leventa", w:"Levothyroxin-Natrium", h:"MSD / Rebopharm", u:"ml", su:"mg", v:[{s:1,p:[30]}]},
+ {n:"Libromide", w:"Kaliumbromid", h:"Dechra", u:"Tbl", su:"mg", v:[{s:325,p:[100]}]},
+ {n:"Lodisure", w:"Amlodipin", h:"Dechra", u:"Tbl", su:"mg", v:[{s:1,p:[56]}]},
+ {n:"Phenobarbital (Luminal vet / Phenoleptil)", w:"Phenobarbital", h:"Virbac / Dechra", u:"Tbl", su:"mg", v:[{l:"Luminaletten vet 15 mg",s:15,p:[100]},{l:"Phenoleptil 25 mg",s:25,p:[100]},{l:"Luminal vet 100 mg",s:100,p:[120]}]},
+ {n:"Lymphomyosot", w:"", h:"Rebopharm", u:"Tbl", v:[{p:[100]}]},
+ {n:"Manuka G Salbe", w:"", h:"Kruuse", u:"g", v:[{p:[15,50]}]},
+ {n:"Mcepe oral", w:"Metoclopramid", h:"CP-Pharma", u:"ml", su:"mg", v:[{s:1,p:[25,100]}]},
+ {n:"Metacam Kautabletten Hund", w:"Meloxicam", h:"Boehringer", u:"Tbl", su:"mg", v:[{s:1,p:[84]}]},
+ {n:"Metacam Suspension Hund", w:"Meloxicam", h:"Boehringer", u:"ml", v:[{p:[10,32,100,180]}]},
+ {n:"Metacam Suspension Katze", w:"Meloxicam", h:"Boehringer", u:"ml", v:[{p:[3,15,30]}]},
+ {n:"Metomotyl", w:"Metoclopramid", h:"Dechra", u:"Tbl", su:"mg", v:[{s:5,p:[10]},{s:10,p:[10]}]},
+ {n:"Metronidazol (Metrovis / Metrobactin)", w:"Metronidazol", h:"Livisto / Dechra", u:"Tbl", su:"mg", v:[{l:"Metrovis 100 mg",s:100,p:[100]},{l:"Metrobactin 250 mg",s:250,p:[100]}]},
+ {n:"Micocep", w:"", h:"CP-Pharma", u:"ml", loose:true, v:[{p:[250]}]},
+ {n:"Microlax Klistier", w:"Natriumcitrat", h:"Rebopharm", u:"Klistier", v:[{p:[12]}]},
+ {n:"Micropaque", w:"Bariumsulfat", h:"Guerbet", u:"ml", v:[{p:[[2000,"Becher"]]}]},
+ {n:"Milbemax Katze ab 2 kg", w:"Milbemycinoxim / Praziquantel", h:"Elanco", u:"Tbl", sp:1, v:[{p:[4]}]},
+ {n:"Milbemax Hund", w:"Milbemycinoxim / Praziquantel", h:"Elanco", u:"Tbl", sp:1, v:[{l:"kleine Hunde & Welpen 1–5 kg",p:[4]},{l:"Kautabletten ab 5 kg",p:[4]}]},
+ {n:"Milprazon Katze 0,5–2 kg", w:"Milbemycinoxim / Praziquantel", h:"TAD / Rebopharm", u:"Tbl", sp:1, v:[{l:"4 mg / 10 mg",p:[4]}]},
+ {n:"Milteforan", w:"Miltefosin", h:"Virbac", u:"ml", su:"mg", v:[{s:20,p:[60,90]}]},
+ {n:"Mirataz", w:"Mirtazapin", h:"Dechra", u:"g", su:"mg", v:[{s:20,p:[3]}]},
+ {n:"NexGard Kautabletten Hund", w:"Afoxolaner", h:"Boehringer", u:"Tbl", sp:1, iv:30, v:[{l:">4–10 kg (28 mg)",p:[6]},{l:">10–25 kg (68 mg)",p:[6]},{l:">25–50 kg (136 mg)",p:[6]}]},
+ {n:"NexGard COMBO Spot-on Katze", w:"Eprinomectin", h:"Boehringer", u:"Pip", iv:30, v:[{l:"S · bis 2,5 kg",p:[]},{l:"2,5–7,5 kg",p:[3]}]},
+ {n:"Novalgin Kinderzäpfchen", w:"Metamizol", h:"Rebopharm", u:"Supp", v:[{p:[5]}]},
+ {n:"Novaminsulfon Tabletten", w:"Metamizol", h:"Lichtenstein / ratiopharm", u:"Tbl", su:"mg", v:[{s:500,p:[[20,"ratiopharm"],[30,"Lichtenstein"],[50,"Lichtenstein"]]}]},
+ {n:"Novaminsulfon Zäpfchen", w:"Metamizol", h:"Rebopharm", u:"Supp", su:"mg", v:[{s:1000,p:[10]}]},
+ {n:"Nux vomica comp. PlantaVet", w:"", h:"WDT (Saluvet)", u:"Amp", v:[{l:"Ampulle à 1 ml",p:[10]}]},
+ {n:"Ohrentropfen City Apotheke Tri/Nys", w:"", h:"City Apotheke", u:"g", v:[{p:[25,50,100]}]},
+ {n:"Omeprazol Kapseln", w:"Omeprazol", h:"AL / Stada", u:"Kap", su:"mg", v:[{s:10,p:[30]},{s:20,p:[30]},{s:40,p:[30]}]},
+ {n:"Onsior Hund", w:"Robenacoxib", h:"Elanco", u:"Tbl", su:"mg", sp:1, v:[{s:10,p:[30]},{s:20,p:[60]},{s:40,p:[60]}]},
+ {n:"Onsior Katze", w:"Robenacoxib", h:"Elanco", u:"Tbl", su:"mg", sp:1, v:[{s:6,p:[60]}]},
+ {n:"OphtalVet Fluid Gel", w:"", h:"almapharm", u:"ml", v:[{p:[15]}]},
+ {n:"Optimmune Augensalbe", w:"Ciclosporin", h:"MSD", u:"g", v:[{l:"2 mg/g",p:[]}]},
+ {n:"Orozyme Zahn-Gel", w:"", h:"Ecuphar", u:"g", v:[{p:[70]}]},
+ {n:"Ortoton Recordati", w:"Methocarbamol", h:"Rebopharm", u:"Tbl", su:"mg", v:[{s:750,p:[100]}]},
+ {n:"Otomax Ohrentropfen", w:"Gentamicin / Betamethason / Clotrimazol", h:"MSD / Rebopharm", u:"ml", v:[{p:[14]}]},
+ {n:"Ototop", w:"Miconazol / Prednisolon / Polymyxin B", h:"Livisto", u:"ml", v:[{p:[30]}]},
+ {n:"Oxytetracyclin-Augensalbe Jenapharm", w:"Oxytetracyclin", h:"CP-Pharma", u:"g", v:[{p:[5]}]},
+ {n:"Palladia", w:"Toceranib", h:"Zoetis", u:"Tbl", su:"mg", sp:1, v:[{s:10,p:[20]},{s:15,p:[20]},{s:50,p:[20]}]},
+ {n:"Panacur Tabletten", w:"Fenbendazol", h:"MSD", u:"Tbl", su:"mg", v:[{s:250,p:[20]},{s:500,p:[20]}]},
+ {n:"Pankreatin Albrecht", w:"Pankreatin", h:"Albrecht", u:"Kap", v:[{p:[]}]},
+ {n:"Phen-Pred", w:"Phenylbutazon / Prednisolon", h:"CP-Pharma", u:"Tbl", v:[{l:"50 mg / 1,5 mg",p:[100]}]},
+ {n:"Phenylbutariem", w:"Phenylbutazon", h:"Ecuphar", u:"ml", v:[{p:[250]}]},
+ {n:"Prednisolon (CP-Pharma / Prednitab)", w:"Prednisolon", h:"CP-Pharma", u:"Tbl", su:"mg", v:[{l:"Prednisolon 5 mg",s:5,p:[100]},{l:"Prednitab Flavour 5 mg",s:5,p:[100]},{l:"Prednitab 20 mg",s:20,p:[100]},{l:"Prednisolon 50 mg",s:50,p:[50]}]},
+ {n:"PregaTab", w:"Pregabalin", h:"Rebopharm", u:"Tbl", su:"mg", v:[{s:25,p:[20]}]},
+ {n:"Previcox", w:"Firocoxib", h:"Boehringer", u:"Tbl", su:"mg", v:[{s:57,p:[30]},{s:227,p:[30,60]}]},
+ {n:"Prilactone Next", w:"Spironolacton", h:"Ceva", u:"Tbl", su:"mg", v:[{s:10,p:[100]},{s:50,p:[100]}]},
+ {n:"Propalin Sirup", w:"Phenylpropanolamin", h:"Vetoquinol", u:"ml", v:[{p:[100]}]},
+ {n:"ProZinc 40 I.E./ml", w:"Insulin", h:"Boehringer", u:"ml", su:"I.E.", v:[{s:40,p:[10]}]},
+ {n:"Rimadyl Tabletten", w:"Carprofen", h:"Zoetis", u:"Tbl", su:"mg", v:[{s:20,p:[100]},{s:50,p:[100]},{s:100,p:[100]}]},
+ {n:"Rimadyl Kautabletten", w:"Carprofen", h:"Zoetis", u:"Tbl", su:"mg", v:[{s:20,p:[20]},{s:50,p:[20]},{s:100,p:[20]}]},
+ {n:"Selgian", w:"Selegilin", h:"Ceva", u:"Tbl", su:"mg", v:[{s:4,p:[30]},{s:10,p:[30,100]}]},
+ {n:"Semintra", w:"Telmisartan", h:"Boehringer", u:"ml", su:"mg", v:[{s:4,p:[100]}]},
+ {n:"Senvelgo", w:"Velagliflozin", h:"Boehringer", u:"ml", su:"mg", v:[{s:15,p:[30]}]},
+ {n:"Sileo Gel", w:"Dexmedetomidin", h:"Ecuphar", u:"ml", v:[{p:[3]}]},
+ {n:"Simparica Hund", w:"Sarolaner", h:"Zoetis", u:"Tbl", sp:1, iv:30, v:[{l:"5 mg · 1,3–2,5 kg",p:[3]},{l:"10 mg · 2,5–5 kg",p:[3]},{l:"20 mg · 5–10 kg",p:[3]},{l:"40 mg · 10–20 kg",p:[3]},{l:"80 mg · 20–40 kg",p:[3]},{l:"120 mg · >40–60 kg",p:[3]}]},
+ {n:"Simparica Trio Hund", w:"Sarolaner / Moxidectin / Pyrantel", h:"Zoetis", u:"Tbl", sp:1, iv:30, v:[{l:"1,25–2,5 kg",p:[3]},{l:"2,6–5 kg",p:[3]},{l:"5,1–10 kg",p:[3]},{l:"10,1–20 kg",p:[3]},{l:"20,1–40 kg",p:[3]},{l:"40,1–60 kg",p:[3]}]},
+ {n:"SotaHEXAL", w:"Sotalol", h:"Rebopharm", u:"Tbl", su:"mg", v:[{s:40,p:[20]}]},
+ {n:"Strantel Hund", w:"Febantel / Praziquantel / Pyrantel", h:"CP-Pharma", u:"Tbl", v:[{p:[104]}]},
+ {n:"Stromease Augentropfen", w:"N-Acetylcystein", h:"TVM / Domes Pharma", u:"ml", v:[{p:[5]}]},
+ {n:"Sucrabest", w:"Sucralfat", h:"Rebopharm", u:"Tbl", su:"mg", v:[{l:"1 g",s:1000,p:[50]}]},
+ {n:"Suprarenales comp. PlantaVet", w:"", h:"WDT / rebovet", u:"Stk", v:[{p:[]}]},
+ {n:"Synulox", w:"Amoxicillin / Clavulansäure", h:"Zoetis", u:"Tbl", su:"mg", v:[{s:250,p:[10]},{s:500,p:[10]}]},
+ {n:"Thiamazol Henning Injektionslösung", w:"Thiamazol", h:"Rebopharm", u:"Amp", su:"mg", v:[{s:40,p:[10]}]},
+ {n:"Thiamazol-PLO-Creme", w:"Thiamazol", h:"City Apotheke", u:"g", su:"mg", v:[{l:"5 mg / 1,5 g",s:5/1.5,p:[100]}]},
+ {n:"Thyrasol", w:"Thiamazol", h:"CP-Pharma", u:"ml", su:"mg", v:[{s:5,p:[100]}]},
+ {n:"Thyronorm", w:"Thiamazol", h:"Elanco", u:"ml", v:[{p:[100]}]},
+ {n:"Toujeo SoloStar", w:"Insulin glargin", h:"Rebopharm", u:"ml", su:"E", v:[{s:300,p:[[1.5,"1 Fertigpen à 1,5 ml"]]}]},
+ {n:"Tramatab", w:"Tramadol", h:"CP-Pharma", u:"Tbl", su:"mg", v:[{s:20,p:[10]},{s:80,p:[10]}]},
+ {n:"Trilotab Kautabletten", w:"Trilostan", h:"CP-Pharma", u:"Tbl", su:"mg", v:[{s:120,p:[30]}]},
+ {n:"Tris-NAC", w:"", h:"Livisto", u:"ml", v:[{p:[120]}]},
+ {n:"TSO-Tab", w:"Trimethoprim / Sulfadiazin", h:"CP-Pharma", u:"Tbl", su:"mg", v:[{l:"20/100 mg",s:120,p:[100]},{l:"80/400 mg",s:480,p:[100]}]},
+ {n:"Unacid", w:"Sultamicillin", h:"Pfizer / Rebopharm", u:"Tbl", su:"mg", v:[{s:375,p:[10]}]},
+ {n:"Vectra Dog", w:"Permethrin / Dinotefuran / Pyriproxifen", h:"Ceva", u:"Pip", iv:30, v:[{l:"1,5–4 kg",p:[3]},{l:"4–10 kg",p:[3]},{l:"10–25 kg",p:[3]},{l:"25–40 kg",p:[3]},{l:"über 40 kg",p:[3]}]},
+ {n:"Veraflox Tabletten", w:"Pradofloxacin", h:"Elanco", u:"Tbl", su:"mg", v:[{s:15,p:[70]},{s:60,p:[70]},{s:120,p:[70]}]},
+ {n:"Veraflox 2,5 % Suspension Katze", w:"Pradofloxacin", h:"Elanco", u:"ml", su:"mg", v:[{s:25,p:[15]}]},
+ {n:"Vetericyn VF+plus", w:"Hypochlorige Säure", h:"Ecuphar", u:"ml", v:[{l:"Augen- u. Ohrreiniger",p:[120]},{l:"Barrier-Gel",p:[120]},{l:"Hydro-Gel Sprühflasche",p:[250]},{l:"Lösung",p:[120,1000]},{l:"Lösung Sprühflasche",p:[500]}]},
+ {n:"Vetmedin orale Lösung", w:"Pimobendan", h:"Boehringer", u:"ml", su:"mg", v:[{s:1.5,p:[50]}]},
+ {n:"Vetoryl Kapseln", w:"Trilostan", h:"Dechra", u:"Kap", su:"mg", v:[{s:5,p:[30]},{s:10,p:[30]},{s:30,p:[30]}]},
+ {n:"Vetoryl Kautabletten", w:"Trilostan", h:"Dechra", u:"Tbl", su:"mg", v:[{s:20,p:[30]}]},
+ {n:"Virbagen Omega", w:"Interferon omega", h:"Virbac", u:"Stk", v:[{l:"10 ME",p:[2]}]},
+ {n:"Vitamin K1 TVM", w:"Phytomenadion", h:"TVM", u:"Tbl", su:"mg", v:[{s:50,p:[14]}]},
+ {n:"Vitamycin Augensalbe", w:"", h:"CP-Pharma", u:"g", v:[{p:[5]}]},
+ {n:"Ypozane 3–7,5 kg", w:"Osateronacetat", h:"Virbac / Rebopharm", u:"Tbl", su:"mg", sp:1, v:[{s:1.875,p:[7]}]},
+ {n:"Zeel ad us. vet.", w:"", h:"Heel / Rebopharm", u:"Tbl", v:[{p:[100]}]},
+ {n:"Zenrelia", w:"Ilunocitinib", h:"Elanco", u:"Tbl", su:"mg", v:[{s:4.8,p:[30]},{s:6.4,p:[30]},{s:8.5,p:[30]},{s:15,p:[30]}]},
+ {n:"Zodon oral", w:"Clindamycin", h:"Ceva", u:"ml", su:"mg", v:[{s:25,p:[20]}]},
+];
+
+const UNITS = {
+  Tbl:["Tablette","Tabletten","Tbl."], Kap:["Kapsel","Kapseln","Kap."], ml:["ml","ml","ml"], g:["g","g","g"],
+  Pip:["Pipette","Pipetten","Pip."], Supp:["Zäpfchen","Zäpfchen","Supp."], Stk:["Stück","Stück","Stk."],
+  Amp:["Ampulle","Ampullen","Amp."], Tube:["Tube","Tuben","Tb."], Klistier:["Klistier","Klistiere","Klist."],
+  Rektaltube:["Rektaltube","Rektaltuben","Rektaltb."]
+};
+const CONT = u => u === "ml" || u === "g";
+
+const nf = (x, d = 2) => Number(x).toLocaleString("de-DE", { maximumFractionDigits: d });
+const uName = (u, n) => UNITS[u][Math.abs(n - 1) < 1e-9 ? 0 : 1];
+const uShort = u => UNITS[u][2];
+const fracTxt = x => {
+  const w = Math.floor(x + 1e-9), r = Math.round((x - w) * 4);
+  const f = ["", "¼", "½", "¾"][r];
+  return (w ? w + (f ? " " : "") : "") + f || "0";
+};
+const amountTxt = (u, n) => (u === "Tbl" ? fracTxt(n) : nf(n)) + " " + (CONT(u) ? u : uName(u, n));
+const vLabel = (f, v) => v.l || (v.s != null ? nf(v.s, 3) + " " + f.su + (CONT(f.u) ? "/" + f.u : "") : "Standard");
+const packSize = p => Array.isArray(p) ? p[0] : p;
+const packNote = p => Array.isArray(p) ? p[1] : "";
+const packName = (u, p) => "OP " + nf(packSize(p)) + " " + uShort(u) + (packNote(p) ? " (" + packNote(p) + ")" : "");
+
+// ---------- Zustand ----------
+const state = { fi: DATA.findIndex(f => f.n === "Apoquel Kautabletten"), vi: 2, split: 2 };
+const $ = id => document.getElementById(id);
+
+function renderList() {
+  const q = $("search").value.trim().toLowerCase();
+  const hits = DATA.map((f, i) => [f, i]).filter(([f]) => !q || (f.n + " " + f.w + " " + f.h).toLowerCase().includes(q));
+  $("count").textContent = hits.length + " von " + DATA.length;
+  $("list").innerHTML = hits.length ? hits.map(([f, i]) =>
+    `<button type="button" role="option" data-i="${i}" aria-selected="${i === state.fi}">
+       <span class="n">${f.n}</span><span class="c">${f.v.length > 1 ? f.v.length + " Var." : ""}</span>
+       <span class="w">${[f.w, f.h].filter(Boolean).join(" · ")}</span></button>`).join("")
+    : `<div class="empty">Kein Präparat gefunden. Anderen Namen oder Wirkstoff versuchen.</div>`;
+}
+
+function renderVariants() {
+  const f = DATA[state.fi];
+  $("variants").innerHTML = f.v.map((v, i) => {
+    const packs = v.p.length ? v.p.map(p => nf(packSize(p))).join(" / ") + " " + uShort(f.u) : "Packung unbekannt";
+    return `<button type="button" class="chip" data-i="${i}" aria-pressed="${i === state.vi}"><b>${vLabel(f, v)}</b><small>${packs}</small></button>`;
+  }).join("");
+}
+
+function renderDoseModes(keep) {
+  const f = DATA[state.fi], v = f.v[state.vi];
+  const opts = [["u", CONT(f.u) ? f.u : UNITS[f.u][1]]];
+  if (v.s != null) opts.push(["s", f.su], ["kg", f.su + "/kg"]);
+  const sel = $("doseMode"), prev = sel.value;
+  sel.innerHTML = opts.map(([k, t]) => `<option value="${k}">${t}</option>`).join("");
+  sel.value = keep && opts.some(o => o[0] === prev) ? prev : "u";
+  $("splitRow").hidden = f.u !== "Tbl";
+  syncSplit();
+  $("weightRow").hidden = sel.value !== "kg";
+}
+
+function syncSplit() {
+  document.querySelectorAll("#split button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === state.split));
+}
+
+function selectFamily(i) {
+  const prevIv = DATA[state.fi].iv;
+  state.fi = i; state.vi = 0;
+  const f = DATA[i];
+  state.split = f.u === "Tbl" ? (f.sp || 2) : 1;
+  $("dose").value = 1;
+  if (f.iv) { $("freq").value = "i" + f.iv; $("dur").value = 3; $("durUnit").value = "30"; }
+  else if (prevIv) { $("freq").value = "d1"; $("dur").value = 14; $("durUnit").value = "1"; }
+  renderList(); renderVariants(); renderDoseModes(false); syncFreq(); compute();
+}
+
+function syncFreq() {
+  $("customDays").hidden = $("freq").value !== "custom";
+  $("durStep").hidden = $("freq").value === "once";
+}
+
+// ---------- Rechnen ----------
+function stepFor(u, split) { return u === "Tbl" ? 1 / split : CONT(u) ? 0.1 : 1; }
+
+function perDoseFor(f, v, mode, amount, weight, split) {
+  let req;
+  if (mode === "u") req = amount;
+  else if (mode === "s") req = amount / v.s;
+  else req = amount * weight / v.s;
+  const st = stepFor(f.u, split);
+  const pd = Math.max(st, Math.round(req / st - 1e-9) * st);
+  return { req, pd: +pd.toFixed(4) };
+}
+
+function schedule() {
+  const fv = $("freq").value;
+  const days = Math.max(1, Math.round((+$("dur").value || 0) * +$("durUnit").value));
+  if (fv === "once") return { doses: 1, perDay: null, days: 1, txt: "einmalig", sig: "einmalig" };
+  if (fv[0] === "d") {
+    const n = +fv.slice(1);
+    return { doses: n * days, perDay: n, days, txt: `${n}× täglich × ${days} Tage`, sig: `${n}× tägl. für ${days} Tage` };
+  }
+  const iv = fv === "custom" ? Math.max(1, Math.round(+$("customDays").value || 1)) : +fv.slice(1);
+  const doses = Math.ceil(days / iv);
+  const lbl = $("freq").value === "custom" ? `alle ${iv} Tage` : $("freq").selectedOptions[0].text;
+  return { doses, perDay: 1 / iv, days, txt: `${lbl} über ${days} Tage = ${doses} Gaben`, sig: `${lbl} über ${days} Tage (${doses} Gaben)` };
+}
+
+function totalNeed(f, pd, doses) {
+  const t = pd * doses;
+  return CONT(f.u) ? Math.ceil(t * 10 - 1e-6) / 10 : Math.ceil(t - 1e-6);
+}
+
+// Abwägung Überschuss gegen Packungsanzahl: jede weitere Packung „kostet“ eine halbe kleinste Packung.
+// minOver = true sucht nur den kleinsten Überschuss.
+function bestCombo(need, packs, minOver) {
+  if (!packs.length || need <= 0) return null;
+  const sc = 10, N = Math.round(need * sc), sizes = packs.map(p => Math.round(packSize(p) * sc));
+  const lim = N + Math.max(...sizes);
+  if (lim > 2e6) return null;
+  const dp = new Uint32Array(lim + 1).fill(0xffffffff), from = new Int16Array(lim + 1).fill(-1);
+  dp[0] = 0;
+  for (let x = 1; x <= lim; x++) for (let i = 0; i < sizes.length; i++) {
+    const s = sizes[i];
+    if (x >= s && dp[x - s] !== 0xffffffff && dp[x - s] + 1 < dp[x]) { dp[x] = dp[x - s] + 1; from[x] = i; }
+  }
+  const lambda = minOver ? 0 : Math.min(...sizes) / 2;
+  let x = -1, best = Infinity;
+  for (let y = N; y <= lim; y++) {
+    if (dp[y] === 0xffffffff) continue;
+    const cost = (y - N) + lambda * dp[y];
+    if (cost < best - 1e-9 || (Math.abs(cost - best) < 1e-9 && dp[y] < dp[x])) { best = cost; x = y; }
+    if (minOver) break;
+  }
+  if (x < 0) return null;
+  const total = x / sc, counts = new Array(packs.length).fill(0);
+  for (let y = x; y > 0; y -= sizes[from[y]]) counts[from[y]]++;
+  return { total, over: +(total - need).toFixed(2), counts, n: counts.reduce((a, b) => a + b, 0) };
+}
+
+function comboTxt(f, packs, c) {
+  return packs.map((p, i) => c.counts[i] ? `${c.counts[i]} × ${packName(f.u, p)}` : null).filter(Boolean).join(" + ");
+}
+
+function compute() {
+  const f = DATA[state.fi], v = f.v[state.vi], mode = $("doseMode").value;
+  const amount = +$("dose").value, weight = +$("weight").value;
+  const out = $("result");
+  if (!(amount > 0) || (mode === "kg" && !(weight > 0))) {
+    out.innerHTML = `<div class="need"><div class="big">–</div><div class="calc">${mode === "kg" && !(weight > 0) ? "Körpergewicht in kg eingeben." : "Dosis pro Gabe eingeben."}</div></div>`;
+    return;
+  }
+  const sch = schedule();
+  const { req, pd } = perDoseFor(f, v, mode, amount, weight, state.split);
+  const need = totalNeed(f, pd, sch.doses);
+  const combo = bestCombo(need, v.p);
+  const notes = [];
+
+  const dev = (pd - req) / req;
+  if (Math.abs(dev) > 0.005) {
+    const reqTxt = (f.u === "Tbl" || !CONT(f.u)) ? nf(req, 2) + " " + uName(f.u, req) : nf(req, 2) + " " + f.u;
+    notes.push(`Rechnerisch ${reqTxt} pro Gabe, gerundet auf ${amountTxt(f.u, pd)} (${dev > 0 ? "+" : ""}${nf(dev * 100, 0)} %${v.s != null ? " = " + nf(pd * v.s, 3) + " " + f.su : ""}).${Math.abs(dev) > 0.15 ? " Andere Stärke oder Teilbarkeit prüfen." : ""}`);
+  }
+  if (!v.p.length) notes.push("Die Packungsgröße steht nicht in der Sortimentsliste. Gesamtbedarf bitte selbst mit der Packung abgleichen.");
+  if (f.loose) notes.push("Dieses Präparat wird laut Liste auch lose (per ml) abgegeben. Dann genügt die exakte Bedarfsmenge.");
+
+  const doseTxt = amountTxt(f.u, pd) + (v.s != null && mode !== "u" ? ` (${nf(pd * v.s, 3)} ${f.su})` : "");
+  const prodTxt = f.n + (f.v.length > 1 || v.s != null ? " " + vLabel(f, v) : "");
+
+  let h = `<div class="need">
+      <div class="label"><span>Gesamtbedarf</span></div>
+      <div class="big">${amountTxt(f.u, need)}</div>
+      <div class="calc">${doseTxt} pro Gabe · ${sch.txt}</div>
+    </div>`;
+
+  if (combo) {
+    const daily = sch.perDay ? pd * sch.perDay : null;
+    const extra = daily && combo.over / daily >= 1 ? ` · reicht ca. ${nf(Math.floor(combo.over / daily + 1e-9), 0)} Tage länger` : "";
+    h += `<div class="rec">
+        <div class="eyebrow">Abgeben</div>
+        <div class="packs">${comboTxt(f, v.p, combo)}</div>
+        <div class="sub">${prodTxt} · ${nf(combo.total)} ${CONT(f.u) ? f.u : uShort(f.u)} gesamt · Überschuss ${amountTxt(f.u, combo.over)}${extra}</div>
+      </div>`;
+    // Alternativen: kleinster Überschuss und Einzelpackung, sofern sie von der Empfehlung abweichen
+    const alts = [];
+    const tight = bestCombo(need, v.p, true);
+    if (tight && tight.total < combo.total) alts.push(`<b>Kleinster Überschuss</b>: ${comboTxt(f, v.p, tight)} · Überschuss ${amountTxt(f.u, tight.over)}`);
+    if (combo.n > 1) {
+      const singles = v.p.map(p => ({ p, over: packSize(p) - need })).filter(o => o.over >= -1e-9).sort((a, b) => a.over - b.over);
+      if (singles.length) alts.push(`<b>Eine Packung</b>: 1 × ${packName(f.u, singles[0].p)} · Überschuss ${amountTxt(f.u, +singles[0].over.toFixed(2))}`);
+    }
+    if (alts.length) h += `<div class="alt">${alts.join("<br>")}</div>`;
+    const sig = `${comboTxt(f, v.p, combo)} ${prodTxt}\nS. ${doseTxt} ${sch.sig}`;
+    h += `<div class="sig"><code id="sigText">${sig}</code><button type="button" class="btn" id="copy">Kopieren</button></div>`;
+  }
+
+  h += notes.map(n => `<div class="note">${n}</div>`).join("");
+
+  if (v.p.length) {
+    const daily = sch.perDay ? pd * sch.perDay : null;
+    h += `<div class="step"><div class="label"><span>Packungsgrößen dieser Stärke</span></div><div class="tablewrap"><table>
+      <thead><tr><th>Packung</th><th>Anzahl</th><th>Menge</th><th>Überschuss</th>${daily ? "<th>Reicht für</th>" : ""}</tr></thead><tbody>
+      ${v.p.map(p => {
+        const s = packSize(p), n = Math.ceil(need / s - 1e-9), tot = n * s;
+        return `<tr><td>${packName(f.u, p)}</td><td class="num">${n}×</td><td class="num">${nf(tot)}</td><td class="num">${nf(tot - need)}</td>${daily ? `<td class="num">${nf(Math.floor(tot / daily + 1e-9), 0)} Tage</td>` : ""}</tr>`;
+      }).join("")}</tbody></table></div></div>`;
+  }
+
+  // Vergleich über alle Stärken desselben Präparats bei Dosierung in mg / mg/kg
+  const alts = f.v.map((w, i) => [w, i]).filter(([w]) => w.s != null);
+  if (mode !== "u" && alts.length > 1) {
+    const mg = mode === "s" ? amount : amount * weight;
+    h += `<div class="step"><div class="label"><span>Vergleich der Stärken für ${nf(mg, 3)} ${f.su} pro Gabe</span></div><div class="tablewrap"><table>
+      <thead><tr><th>Stärke</th><th>Pro Gabe</th><th>Abweichung</th><th>Bedarf</th><th>Empfehlung</th></tr></thead><tbody>
+      ${alts.map(([w, i]) => {
+        const r = perDoseFor(f, w, "s", mg, 0, state.split);
+        const nd = totalNeed(f, r.pd, sch.doses), c = bestCombo(nd, w.p), d = (r.pd - r.req) / r.req;
+        return `<tr class="click${i === state.vi ? " cur" : ""}" data-vi="${i}" title="Diese Stärke wählen"><td>${vLabel(f, w)}</td><td class="num">${amountTxt(f.u, r.pd)}</td><td class="num">${Math.abs(d) < 0.005 ? "exakt" : (d > 0 ? "+" : "") + nf(d * 100, 0) + " %"}</td><td class="num">${nf(nd)}</td><td>${c ? comboTxt(f, w.p, c) : "–"}</td></tr>`;
+      }).join("")}</tbody></table></div><div class="hint">Zeile antippen, um die Stärke zu übernehmen.</div></div>`;
+  }
+
+  out.innerHTML = h;
+}
+
+// ---------- Ereignisse ----------
+$("search").addEventListener("input", renderList);
+$("list").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) selectFamily(+b.dataset.i); });
+$("variants").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  state.vi = +b.dataset.i; renderVariants(); renderDoseModes(true); compute();
+});
+$("split").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; state.split = +b.dataset.v; syncSplit(); compute(); });
+$("doseMode").addEventListener("change", () => { $("weightRow").hidden = $("doseMode").value !== "kg"; compute(); });
+$("freq").addEventListener("change", () => { syncFreq(); compute(); });
+["dose", "weight", "customDays", "dur"].forEach(id => $(id).addEventListener("input", compute));
+$("durUnit").addEventListener("change", compute);
+$("result").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-vi]");
+  if (tr) { state.vi = +tr.dataset.vi; renderVariants(); renderDoseModes(true); compute(); return; }
+  if (e.target.id === "copy") {
+    const txt = $("sigText").textContent, btn = e.target;
+    navigator.clipboard.writeText(txt).then(() => { btn.textContent = "Kopiert"; setTimeout(() => btn.textContent = "Kopieren", 1500); })
+      .catch(() => { const r = document.createRange(); r.selectNodeContents($("sigText")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); });
+  }
+});
+
+// Beispiel beim Öffnen: Apoquel 16 mg, 0,5 mg/kg bei 32 kg, 2× täglich für 14 Tage
+renderList(); renderVariants(); renderDoseModes(false);
+$("doseMode").value = "kg"; $("weightRow").hidden = false;
+$("dose").value = 0.5; $("weight").value = 32; $("freq").value = "d2"; $("dur").value = 14; $("durUnit").value = "1";
+syncFreq(); compute();
+</script>
+</body>
+</html>

@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+</style>
+<title>Metacam Reichweitenrechner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: eine Eingabekarte (Tierart → Form → Gewicht → Dauer), darunter das Ergebnis mit Mindestpackung und Reichweitentabelle für genau dieses Gewicht. */
+:root {
+  --bg: #f6f3f7;
+  --surface: #ffffff;
+  --sunk: #f0ebf2;
+  --ink: #1e1522;
+  --muted: #65586b;
+  --line: #ddd3e1;
+  --accent: #7a2a6e;
+  --accent-ink: #ffffff;
+  --accent-soft: #f2e2ef;
+  --ok: #1d6b4a;
+  --warn: #8f5300;
+  --warn-soft: #fbefd9;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141016; --surface: #1d1720; --sunk: #17121a; --ink: #eee6f0; --muted: #a998ae; --line: #352b3a;
+    --accent: #dc8fcf; --accent-ink: #2a0f25; --accent-soft: #34202f; --ok: #6fd3a5; --warn: #f2b65c; --warn-soft: #33270f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141016; --surface: #1d1720; --sunk: #17121a; --ink: #eee6f0; --muted: #a998ae; --line: #352b3a;
+  --accent: #dc8fcf; --accent-ink: #2a0f25; --accent-soft: #34202f; --ok: #6fd3a5; --warn: #f2b65c; --warn-soft: #33270f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+header h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.7rem; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+@media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 18px; min-width: 0; }
+.step { display: grid; gap: 8px; min-width: 0; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+input, select, button { font: inherit; color: inherit; }
+input[type="number"], select { background: var(--sunk); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; width: 100%; min-width: 0; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row > * { flex: 1 1 120px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { flex: 1; border: 0; background: var(--sunk); padding: 9px 12px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 0.92rem; }
+.check input { margin-top: 4px; accent-color: var(--accent); }
+.hint { font-size: 0.85rem; color: var(--muted); }
+.need .big { font-family: var(--font-display); font-weight: 700; font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.calc { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
+.rec { background: var(--accent); color: var(--accent-ink); border-radius: 9px; padding: 16px; display: grid; gap: 6px; }
+.rec .eyebrow { font-family: var(--font-display); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; }
+.rec .packs { font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; line-height: 1.2; }
+.rec .sub { font-size: 0.9rem; opacity: 0.92; }
+.syr { display: flex; gap: 14px; align-items: center; background: var(--sunk); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; }
+.syr svg { flex: 0 0 auto; width: 150px; height: 34px; }
+.syr div { min-width: 0; }
+.syr b { font-family: var(--font-display); font-size: 1.1rem; }
+.note { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-family: var(--font-display); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--sunk); }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+tr.min td { background: var(--accent-soft); font-weight: 700; }
+.yes { color: var(--ok); font-weight: 700; }
+.no { color: var(--muted); }
+footer { color: var(--muted); font-size: 0.82rem; max-width: 85ch; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Metacam Reichweitenrechner</h1>
+    <p>Gewicht und Behandlungsdauer eingeben. Der Rechner zeigt, welche Packung mindestens mitgegeben werden muss. Grundlage ist die Erhaltungsdosis 1× täglich laut Boehringer-Dosiertabelle.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Eingabe">
+      <div class="step">
+        <div class="label">Tierart</div>
+        <div class="seg" id="species" role="group" aria-label="Tierart">
+          <button type="button" data-v="dog" aria-pressed="true">Hund</button>
+          <button type="button" data-v="cat" aria-pressed="false">Katze</button>
+        </div>
+      </div>
+      <div class="step" id="formStep">
+        <div class="label">Darreichungsform</div>
+        <div class="seg" id="form" role="group" aria-label="Darreichungsform">
+          <button type="button" data-v="susp" aria-pressed="true">Suspension 1,5 mg/ml</button>
+          <button type="button" data-v="tab" aria-pressed="false">Kautabletten 1 mg</button>
+        </div>
+      </div>
+      <div class="step">
+        <label class="label" for="weight">Körpergewicht (kg)</label>
+        <input type="number" id="weight" min="0" step="0.1" inputmode="decimal" value="12.4">
+      </div>
+      <div class="step">
+        <div class="label">Dauer der Gabe</div>
+        <div class="row">
+          <input type="number" id="dur" min="1" step="1" inputmode="numeric" value="14" aria-label="Dauer">
+          <select id="durUnit" aria-label="Einheit der Dauer">
+            <option value="1">Tage</option>
+            <option value="7">Wochen</option>
+            <option value="30">Monate (à 30 Tage)</option>
+          </select>
+        </div>
+      </div>
+      <div class="step" id="stepStep">
+        <label class="label" for="syrStep">Skala der Dosierspritze</label>
+        <select id="syrStep">
+          <option value="1">Spritze auf volle kg aufziehen</option>
+          <option value="0.5">Spritze auf 0,5 kg genau aufziehen</option>
+          <option value="0">exakt nach Gewicht (ohne Rundung)</option>
+        </select>
+        <span class="hint">Die Spritze ist in kg skaliert. Aufgezogen wird bis zur nächsten Markierung über dem Körpergewicht. Diese Menge zählt für den Verbrauch.</span>
+      </div>
+      <label class="check"><input type="checkbox" id="loading"> <span>Am 1. Tag die doppelte Dosis oral geben (Initialdosis). Nicht ankreuzen, wenn die Initialdosis per Injektion in der Praxis gegeben wurde.</span></label>
+    </section>
+
+    <section class="panel" aria-label="Ergebnis" aria-live="polite" id="result"></section>
+  </div>
+
+  <footer>
+    Rechengrundlage aus der Metacam-Dosiertabelle (Boehringer Ingelheim): Hund 0,1 mg/kg = 1/15 ml Suspension pro kg; unter 5 kg 2 Tropfen pro kg. Katze 0,05 mg/kg = 0,1 ml Suspension pro kg; unter 2 kg 3 Tropfen pro kg. 1 ml entspricht 30 Tropfen. Kautabletten 1 mg: 4–7 kg ½ Tablette, danach ½ Tablette je angefangene 5 kg. Die gedruckte Reichweitentabelle rundet teils auf, z. B. 10 ml bei 40 kg „4 Tage“ statt rechnerisch 3,75 Tage. Dieser Rechner rechnet exakt und rundet Reichweiten immer ab. Restmengen, die sich nicht mehr aus der Flasche aufziehen lassen, sind nicht berücksichtigt.
+  </footer>
+</div>
+
+<script>
+const PACKS = {
+  dog: { susp: [10, 32, 100, 180], tab: [84] },
+  cat: { susp: [3, 15, 30] }
+};
+const st = { species: "dog", form: "susp" };
+const $ = id => document.getElementById(id);
+const nf = (x, d = 2) => Number(x).toLocaleString("de-DE", { maximumFractionDigits: d });
+const frac = x => { const w = Math.floor(x + 1e-9), r = Math.round((x - w) * 2); return (w ? w : "") + (r ? (w ? " " : "") + "½" : "") || "0"; };
+
+function setSeg(id, v) { document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v)); }
+
+// Tagesverbrauch und Aufziehhinweis für die aktuelle Auswahl
+function daily(w) {
+  if (st.form === "tab") {
+    if (w < 4) return null;
+    const n = w <= 7 ? 0.5 : Math.ceil(w / 5 - 1e-9) * 0.5;
+    return { amount: n, unit: "Tbl", how: `${frac(n)} Kautablette${n > 1 ? "n" : ""} à 1 mg`, mg: n };
+  }
+  const dog = st.species === "dog";
+  const dropLimit = dog ? 5 : 2, dropsPerKg = dog ? 2 : 3, mlPerKg = dog ? 1 / 15 : 0.1;
+  if (w < dropLimit) {
+    const drops = Math.ceil(w * dropsPerKg - 1e-9);
+    return { amount: drops / 30, unit: "ml", how: `${drops} Tropfen`, drops, mg: drops / 30 * (dog ? 1.5 : 0.5) };
+  }
+  const s = +$("syrStep").value;
+  const kg = s ? Math.ceil(w / s - 1e-9) * s : w;
+  return { amount: kg * mlPerKg, unit: "ml", how: `Spritze auf ${nf(kg, 1)} kg`, kg, mg: kg * mlPerKg * (dog ? 1.5 : 0.5) };
+}
+
+function syringeSvg(kg, max) {
+  const x = 10 + Math.min(1, kg / max) * 120;
+  return `<svg viewBox="0 0 150 34" aria-hidden="true">
+    <rect x="10" y="9" width="120" height="16" rx="3" fill="none" stroke="var(--muted)" stroke-width="1.5"/>
+    <rect x="10" y="9" width="${x - 10}" height="16" rx="3" fill="var(--accent)" opacity="0.35"/>
+    ${Array.from({ length: 11 }, (_, i) => `<line x1="${10 + i * 12}" y1="9" x2="${10 + i * 12}" y2="${i % 5 ? 14 : 17}" stroke="var(--muted)" stroke-width="1"/>`).join("")}
+    <line x1="${x}" y1="5" x2="${x}" y2="29" stroke="var(--accent)" stroke-width="2.5"/>
+    <rect x="130" y="13" width="14" height="8" fill="var(--muted)"/><rect x="2" y="15" width="8" height="4" fill="var(--muted)"/>
+  </svg>`;
+}
+
+function compute() {
+  const w = +$("weight").value, days = Math.max(1, Math.round((+$("dur").value || 0) * +$("durUnit").value));
+  const out = $("result");
+  if (!(w > 0)) { out.innerHTML = `<div class="need"><div class="big">–</div><div class="calc">Körpergewicht in kg eingeben.</div></div>`; return; }
+  const d = daily(w);
+  if (!d) { out.innerHTML = `<div class="note">Die Kautabletten 1 mg sind laut Dosiertabelle erst ab 4 kg vorgesehen. Für leichtere Hunde bitte die Suspension wählen.</div>`; return; }
+
+  const loading = $("loading").checked;
+  const doseDays = days + (loading ? 1 : 0);
+  let need = d.amount * doseDays;
+  need = d.unit === "Tbl" ? Math.ceil(need * 2 - 1e-9) / 2 : Math.ceil(need * 100 - 1e-6) / 100;
+  const packs = PACKS[st.species][st.form];
+  const unitTxt = d.unit === "Tbl" ? "Tbl." : "ml";
+  const fmt = x => d.unit === "Tbl" ? frac(x) + " Tbl." : nf(x) + " ml";
+
+  const fit = packs.find(p => p >= need - 1e-9);
+  let recTxt, sub;
+  if (fit) {
+    const reach = Math.floor((fit / d.amount) + 1e-9) - (loading ? 1 : 0);
+    recTxt = `${nf(fit)} ${unitTxt}`;
+    sub = `reicht für ${reach} Tage bei ${nf(w, 1)} kg · Überschuss ${fmt(fit - need)}`;
+  } else {
+    // größer als die größte Packung: mit größter Packung auffüllen, Rest mit der kleinsten passenden
+    const big = packs[packs.length - 1];
+    let n = Math.floor(need / big), rest = need - n * big, add = null;
+    if (rest > 1e-9) { add = packs.find(p => p >= rest - 1e-9); }
+    const parts = [];
+    if (n) parts.push(`${n} × ${nf(big)} ${unitTxt}`);
+    if (add) parts.push(`1 × ${nf(add)} ${unitTxt}`);
+    const total = n * big + (add || 0);
+    recTxt = parts.join(" + ");
+    sub = `keine Einzelpackung reicht · zusammen ${nf(total)} ${unitTxt} · Überschuss ${fmt(total - need)}`;
+  }
+
+  const perDay = d.unit === "Tbl" ? `${frac(d.amount)} Tbl.` : `${nf(d.amount, 3)} ml`;
+  let h = `<div class="need">
+      <div class="label">Gesamtbedarf</div>
+      <div class="big">${fmt(need)}</div>
+      <div class="calc">${perDay} pro Tag (${nf(d.mg, 3)} mg Meloxicam) × ${days} Tage${loading ? " + 1 Initialdosis" : ""}</div>
+    </div>
+    <div class="rec">
+      <div class="eyebrow">Mindestens mitgeben</div>
+      <div class="packs">${recTxt}</div>
+      <div class="sub">Metacam ${st.form === "tab" ? "Kautabletten 1 mg" : st.species === "dog" ? "Suspension für Hunde 1,5 mg/ml" : "Suspension für Katzen 0,5 mg/ml"} · ${sub}</div>
+    </div>`;
+
+  if (d.kg != null) {
+    h += `<div class="syr">${syringeSvg(d.kg, st.species === "dog" ? Math.max(20, Math.ceil(d.kg / 10) * 10) : 10)}<div><b>${d.how}</b><br><span class="hint">täglich aufziehen = ${nf(d.amount, 3)} ml${Math.abs(d.kg - w) > 1e-9 ? ` (Gewicht ${nf(w, 1)} kg aufgerundet)` : ""}</span></div></div>`;
+  } else if (d.drops != null) {
+    h += `<div class="syr"><div><b>${d.how} täglich</b><br><span class="hint">Unter ${st.species === "dog" ? "5" : "2"} kg wird laut Tabelle mit Tropfen dosiert, nicht mit der Spritze (${nf(d.amount, 3)} ml).</span></div></div>`;
+  } else {
+    h += `<div class="syr"><div><b>${d.how} täglich</b><br><span class="hint">Packung mit 84 Kautabletten</span></div></div>`;
+  }
+
+  const chosen = fit || recTxt.split(" + ").reduce((s, t) => { const [n, , size] = t.split(" "); return s + (+n) * parseFloat(size.replace(",", ".")); }, 0);
+  if (d.unit === "ml" && chosen - need < d.amount) h += `<div class="note">Die Packung reicht rechnerisch genau, aber ohne Puffer von mindestens einer Tagesdosis. Weil sich der Rest nicht ganz aus der Flasche aufziehen lässt, lieber die nächstgrößere Packung mitgeben.</div>`;
+  if (st.form === "tab" && w > 50) h += `<div class="note">Die Dosiertabelle für Kautabletten endet bei 50 kg. Dosierung bitte anhand der Fachinformation prüfen.</div>`;
+
+  h += `<div class="step"><div class="label">Reichweite aller Packungen bei ${nf(w, 1)} kg</div><div class="tablewrap"><table>
+    <thead><tr><th>Packung</th><th>Reicht für</th><th>${days} Tage abgedeckt?</th></tr></thead><tbody>
+    ${packs.map(p => {
+      const reach = Math.floor(p / d.amount + 1e-9) - (loading ? 1 : 0);
+      return `<tr class="${p === fit ? "min" : ""}"><td>${nf(p)} ${unitTxt}</td><td class="num">${Math.max(0, reach)} Tage</td><td class="${reach >= days ? "yes" : "no"}">${reach >= days ? "ja" : "nein"}</td></tr>`;
+    }).join("")}</tbody></table></div></div>`;
+
+  out.innerHTML = h;
+}
+
+function syncForm() {
+  $("formStep").hidden = st.species === "cat";
+  if (st.species === "cat") st.form = "susp";
+  setSeg("species", st.species); setSeg("form", st.form);
+  $("stepStep").hidden = st.form === "tab";
+  compute();
+}
+
+$("species").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { st.species = b.dataset.v; syncForm(); } });
+$("form").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { st.form = b.dataset.v; syncForm(); } });
+["weight", "dur"].forEach(id => $(id).addEventListener("input", compute));
+["durUnit", "syrStep", "loading"].forEach(id => $(id).addEventListener("change", compute));
+syncForm();
+</script>
+</body>
+</html>
