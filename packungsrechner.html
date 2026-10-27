@@ -89,6 +89,8 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .seg button:last-child { border-right: 0; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .hint { font-size: 0.85rem; color: var(--muted); }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
+.check input { margin-top: 4px; accent-color: var(--accent); }
 
 /* Ergebnis */
 .result { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
@@ -161,6 +163,15 @@ footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
             <button type="button" data-v="4">¼</button>
           </div>
         </div>
+        <div class="row" id="syrRow" hidden>
+          <label class="hint narrow" for="syrStep">Dosierspritze</label>
+          <select id="syrStep">
+            <option value="1">auf volle kg aufziehen</option>
+            <option value="0.5">auf 0,5 kg genau aufziehen</option>
+            <option value="0">exakt nach Gewicht</option>
+          </select>
+        </div>
+        <label class="check" id="loadRow" hidden><input type="checkbox" id="loading"> <span>Am 1. Tag doppelte Dosis oral (Initialdosis). Nicht ankreuzen, wenn sie per Injektion in der Praxis gegeben wurde.</span></label>
       </div>
 
       <div class="step">
@@ -201,7 +212,7 @@ footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
   </div>
 
   <footer>
-    Datengrundlage: Sortimentsliste „Tierarzt-Preise“ (6 Seiten). Packungsgrößen und Stärken stammen aus den Artikelbezeichnungen; Konzentrationen sind nur hinterlegt, wo sie in der Bezeichnung stehen. Ohne Konzentration wird in Stück, ml oder g gerechnet. Die Liste enthält keine Preise, daher empfiehlt der Rechner die Kombination mit dem geringsten Überschuss. Dosierungen bitte immer anhand der Fachinformation prüfen.
+    Datengrundlage: Sortimentsliste „Tierarzt-Preise“ (6 Seiten). Packungsgrößen und Stärken stammen aus den Artikelbezeichnungen; Konzentrationen sind nur hinterlegt, wo sie in der Bezeichnung stehen; für Metacam stammen sie aus der Metacam-Dosiertabelle von Boehringer Ingelheim. Metacam wird nach Körpergewicht 1× täglich gerechnet: Die Dosierspritze ist in kg skaliert und wird bis zur nächsten Markierung über dem Gewicht aufgezogen (Hund 1/15 ml je kg, unter 5 kg 2 Tropfen je kg; Katze 0,1 ml je kg, unter 2 kg 3 Tropfen je kg; Kautabletten 1 mg ab 4 kg ½ Tablette je angefangene 5 kg). Ohne Konzentration wird in Stück, ml oder g gerechnet. Die Liste enthält keine Preise, daher empfiehlt der Rechner die Kombination mit dem geringsten Überschuss. Dosierungen bitte immer anhand der Fachinformation prüfen.
   </footer>
 </div>
 
@@ -294,9 +305,9 @@ const DATA = [
  {n:"Lymphomyosot", w:"", h:"Rebopharm", u:"Tbl", v:[{p:[100]}]},
  {n:"Manuka G Salbe", w:"", h:"Kruuse", u:"g", v:[{p:[15,50]}]},
  {n:"Mcepe oral", w:"Metoclopramid", h:"CP-Pharma", u:"ml", su:"mg", v:[{s:1,p:[25,100]}]},
- {n:"Metacam Kautabletten Hund", w:"Meloxicam", h:"Boehringer", u:"Tbl", su:"mg", v:[{s:1,p:[84]}]},
- {n:"Metacam Suspension Hund", w:"Meloxicam", h:"Boehringer", u:"ml", v:[{p:[10,32,100,180]}]},
- {n:"Metacam Suspension Katze", w:"Meloxicam", h:"Boehringer", u:"ml", v:[{p:[3,15,30]}]},
+ {n:"Metacam Kautabletten Hund", w:"Meloxicam", h:"Boehringer", u:"Tbl", su:"mg", wb:"kt", v:[{s:1,p:[84]}]},
+ {n:"Metacam Suspension Hund", w:"Meloxicam", h:"Boehringer", u:"ml", su:"mg", wb:{mlkg:1/15, drop:5, dpk:2}, v:[{s:1.5,p:[10,32,100,180]}]},
+ {n:"Metacam Suspension Katze", w:"Meloxicam", h:"Boehringer", u:"ml", su:"mg", wb:{mlkg:0.1, drop:2, dpk:3}, v:[{s:0.5,p:[3,15,30]}]},
  {n:"Metomotyl", w:"Metoclopramid", h:"Dechra", u:"Tbl", su:"mg", v:[{s:5,p:[10]},{s:10,p:[10]}]},
  {n:"Metronidazol (Metrovis / Metrobactin)", w:"Metronidazol", h:"Livisto / Dechra", u:"Tbl", su:"mg", v:[{l:"Metrovis 100 mg",s:100,p:[100]},{l:"Metrobactin 250 mg",s:250,p:[100]}]},
  {n:"Micocep", w:"", h:"CP-Pharma", u:"ml", loose:true, v:[{p:[250]}]},
@@ -424,12 +435,36 @@ function renderDoseModes(keep) {
   const f = DATA[state.fi], v = f.v[state.vi];
   const opts = [["u", CONT(f.u) ? f.u : UNITS[f.u][1]]];
   if (v.s != null) opts.push(["s", f.su], ["kg", f.su + "/kg"]);
+  if (f.wb) opts.unshift(["syr", f.wb === "kt" ? "nach Gewicht (Dosiertabelle)" : "nach Gewicht (Dosierspritze)"]);
   const sel = $("doseMode"), prev = sel.value;
   sel.innerHTML = opts.map(([k, t]) => `<option value="${k}">${t}</option>`).join("");
-  sel.value = keep && opts.some(o => o[0] === prev) ? prev : "u";
-  $("splitRow").hidden = f.u !== "Tbl";
+  sel.value = keep && opts.some(o => o[0] === prev) ? prev : opts[0][0];
   syncSplit();
-  $("weightRow").hidden = sel.value !== "kg";
+  syncMode();
+}
+
+function syncMode() {
+  const f = DATA[state.fi], m = $("doseMode").value;
+  $("weightRow").hidden = m !== "kg" && m !== "syr";
+  $("dose").hidden = m === "syr";
+  $("splitRow").hidden = f.u !== "Tbl" || m === "syr";
+  $("syrRow").hidden = m !== "syr" || f.wb === "kt";
+  $("loadRow").hidden = m !== "syr";
+}
+
+// Metacam: Tagesmenge nach Körpergewicht laut Dosiertabelle
+function wbDose(f, w) {
+  if (f.wb === "kt") {
+    if (w < 4) return null;
+    const n = w <= 7 ? 0.5 : Math.ceil(w / 5 - 1e-9) * 0.5;
+    return { pd: n, how: `${fracTxt(n)} ${uName("Tbl", n)} nach Dosiertabelle` };
+  }
+  if (w < f.wb.drop) {
+    const drops = Math.ceil(w * f.wb.dpk - 1e-9);
+    return { pd: drops / 30, how: `${drops} Tropfen` };
+  }
+  const st = +$("syrStep").value, kg = st ? Math.ceil(w / st - 1e-9) * st : w;
+  return { pd: kg * f.wb.mlkg, how: `Spritze auf ${nf(kg, 1)} kg` };
 }
 
 function syncSplit() {
@@ -442,6 +477,7 @@ function selectFamily(i) {
   const f = DATA[i];
   state.split = f.u === "Tbl" ? (f.sp || 2) : 1;
   $("dose").value = 1;
+  if (f.wb) $("freq").value = "d1";
   if (f.iv) { $("freq").value = "i" + f.iv; $("dur").value = 3; $("durUnit").value = "30"; }
   else if (prevIv) { $("freq").value = "d1"; $("dur").value = 14; $("durUnit").value = "1"; }
   renderList(); renderVariants(); renderDoseModes(false); syncFreq(); compute();
@@ -519,14 +555,30 @@ function compute() {
   const f = DATA[state.fi], v = f.v[state.vi], mode = $("doseMode").value;
   const amount = +$("dose").value, weight = +$("weight").value;
   const out = $("result");
-  if (!(amount > 0) || (mode === "kg" && !(weight > 0))) {
-    out.innerHTML = `<div class="need"><div class="big">–</div><div class="calc">${mode === "kg" && !(weight > 0) ? "Körpergewicht in kg eingeben." : "Dosis pro Gabe eingeben."}</div></div>`;
+  const syr = mode === "syr", byWeight = mode === "kg" || syr;
+  if ((!syr && !(amount > 0)) || (byWeight && !(weight > 0))) {
+    out.innerHTML = `<div class="need"><div class="big">–</div><div class="calc">${byWeight && !(weight > 0) ? "Körpergewicht in kg eingeben." : "Dosis pro Gabe eingeben."}</div></div>`;
     return;
   }
+  let req, pd, how;
+  if (syr) {
+    const r = wbDose(f, weight);
+    if (!r) { out.innerHTML = `<div class="note">Metacam Kautabletten 1 mg sind laut Dosiertabelle erst ab 4 kg vorgesehen. Für leichtere Hunde bitte die Suspension wählen.</div>`; return; }
+    ({ pd, how } = r); req = pd;
+  } else ({ req, pd } = perDoseFor(f, v, mode, amount, weight, state.split));
   const sch = schedule();
-  const { req, pd } = perDoseFor(f, v, mode, amount, weight, state.split);
-  const need = totalNeed(f, pd, sch.doses);
-  const combo = bestCombo(need, v.p);
+  const loading = syr && $("loading").checked;
+  if (loading) { sch.txt += " + 1 Initialdosis"; sch.sig += ", am 1. Tag doppelte Dosis"; }
+  const need = totalNeed(f, pd, sch.doses + (loading ? 1 : 0));
+  let combo = bestCombo(need, v.p);
+  // Metacam nach Gewicht: kleinste einzelne Packung, die reicht; Kombination nur, wenn keine Packung allein reicht
+  if (syr) {
+    const fits = v.p.map((p, i) => [packSize(p), i]).filter(([s]) => s >= need - 1e-9).sort((a, b) => a[0] - b[0]);
+    if (fits.length) {
+      const [s, i] = fits[0], counts = v.p.map((_, j) => +(j === i));
+      combo = { total: s, over: +(s - need).toFixed(2), counts, n: 1 };
+    }
+  }
   const notes = [];
 
   const dev = (pd - req) / req;
@@ -537,7 +589,12 @@ function compute() {
   if (!v.p.length) notes.push("Die Packungsgröße steht nicht in der Sortimentsliste. Gesamtbedarf bitte selbst mit der Packung abgleichen.");
   if (f.loose) notes.push("Dieses Präparat wird laut Liste auch lose (per ml) abgegeben. Dann genügt die exakte Bedarfsmenge.");
 
-  const doseTxt = amountTxt(f.u, pd) + (v.s != null && mode !== "u" ? ` (${nf(pd * v.s, 3)} ${f.su})` : "");
+  if (syr && CONT(f.u) && combo && combo.over < pd) notes.push("Die Packung reicht rechnerisch genau, aber ohne Puffer von einer Tagesdosis. Weil sich der Rest nicht ganz aus der Flasche aufziehen lässt, lieber die nächstgrößere Packung mitgeben.");
+  if (syr && f.wb === "kt" && weight > 50) notes.push("Die Dosiertabelle für Kautabletten endet bei 50 kg. Dosierung bitte anhand der Fachinformation prüfen.");
+
+  const doseTxt = syr
+    ? (f.wb === "kt" ? how : `${how} = ${nf(pd, 3)} ml`) + ` (${nf(pd * v.s, 3)} ${f.su})`
+    : amountTxt(f.u, pd) + (v.s != null && mode !== "u" ? ` (${nf(pd * v.s, 3)} ${f.su})` : "");
   const prodTxt = f.n + (f.v.length > 1 || v.s != null ? " " + vLabel(f, v) : "");
 
   let h = `<div class="need">
@@ -548,7 +605,7 @@ function compute() {
 
   if (combo) {
     const daily = sch.perDay ? pd * sch.perDay : null;
-    const extra = daily && combo.over / daily >= 1 ? ` · reicht ca. ${nf(Math.floor(combo.over / daily + 1e-9), 0)} Tage länger` : "";
+    const extra = daily && combo.over / daily >= 1 ? ` · reicht ca. ${Math.floor(combo.over / daily + 1e-9)} ${Math.floor(combo.over / daily + 1e-9) === 1 ? "Tag" : "Tage"} länger` : "";
     h += `<div class="rec">
         <div class="eyebrow">Abgeben</div>
         <div class="packs">${comboTxt(f, v.p, combo)}</div>
@@ -581,7 +638,7 @@ function compute() {
 
   // Vergleich über alle Stärken desselben Präparats bei Dosierung in mg / mg/kg
   const alts = f.v.map((w, i) => [w, i]).filter(([w]) => w.s != null);
-  if (mode !== "u" && alts.length > 1) {
+  if ((mode === "s" || mode === "kg") && alts.length > 1) {
     const mg = mode === "s" ? amount : amount * weight;
     h += `<div class="step"><div class="label"><span>Vergleich der Stärken für ${nf(mg, 3)} ${f.su} pro Gabe</span></div><div class="tablewrap"><table>
       <thead><tr><th>Stärke</th><th>Pro Gabe</th><th>Abweichung</th><th>Bedarf</th><th>Empfehlung</th></tr></thead><tbody>
@@ -603,7 +660,8 @@ $("variants").addEventListener("click", e => {
   state.vi = +b.dataset.i; renderVariants(); renderDoseModes(true); compute();
 });
 $("split").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; state.split = +b.dataset.v; syncSplit(); compute(); });
-$("doseMode").addEventListener("change", () => { $("weightRow").hidden = $("doseMode").value !== "kg"; compute(); });
+$("doseMode").addEventListener("change", () => { syncMode(); compute(); });
+["syrStep", "loading"].forEach(id => $(id).addEventListener("change", compute));
 $("freq").addEventListener("change", () => { syncFreq(); compute(); });
 ["dose", "weight", "customDays", "dur"].forEach(id => $(id).addEventListener("input", compute));
 $("durUnit").addEventListener("change", compute);
