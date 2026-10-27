@@ -691,7 +691,8 @@ function applyRec(i) {
 }
 
 // Dosieroptionen für eine Zieldosis in mg: jede Stärke einzeln (mit Teilbarkeit) und, bei Tabletten
-// und Kapseln, je 1 ganzes Stück zweier verschiedener Stärken (wie Cerenia im Kostenvoranschlag).
+// und Kapseln, zwei verschiedene Stärken zusammen (wie Cerenia im Kostenvoranschlag), Tabletten auch
+// geteilt, z. B. 1 × 60 mg + ½ × 16 mg, zusammen höchstens 2 Stück.
 // Auswahl wie im Kostenvoranschlag: nie unter der Zieldosis, höchstens 2 Stück pro Gabe (nur wenn das
 // nicht reicht, auch mehr), sonst so nah wie möglich an der Zieldosis; bei gleicher Dosis weniger Stück.
 function doseOptions(f, mg) {
@@ -705,13 +706,20 @@ function doseOptions(f, mg) {
     for (let i = 0; i < f.v.length; i++) for (let j = i + 1; j < f.v.length; j++) {
       const a = f.v[i].s, b = f.v[j].s;
       if (a == null || b == null || a === b) continue;
-      opts.push({ parts: [[i, 1], [j, 1]], mg: a + b, pieces: 2 });
+      const st = f.u === "Tbl" ? 1 / state.split : 1;
+      for (let x = st; x <= 2 - st + 1e-9; x += st) for (let y = st; x + y <= 2 + 1e-9; y += st)
+        opts.push({ parts: [[i, x], [j, y]], mg: x * a + y * b, pieces: x + y });
     }
   }
   for (const o of opts) o.dev = (o.mg - mg) / mg;
   // Rangfolge: Optionen unter der Zieldosis ganz hinten, dann höchstens 2 Stück vor mehr Stück,
-  // dann geringste Überdosierung, dann weniger Stück
-  for (const o of opts) o.score = (o.dev < -1e-9 ? 100 - o.dev : 0) + (o.pieces > 2 + 1e-9 ? 10 : 0) + Math.max(o.dev, 0) + o.pieces * 1e-6;
+  // dann geringste Überdosierung; jede zu teilende Tablette zählt wie 4 % und eine zweite Stärke
+  // (zusätzliche Packung) wie 5 % Überdosierung, damit einfache Lösungen bei kleinem Unterschied gewinnen
+  for (const o of opts) {
+    const splits = o.parts.filter(([, n]) => Math.abs(n - Math.round(n)) > 1e-9).length;
+    o.score = (o.dev < -1e-9 ? 100 - o.dev : 0) + (o.pieces > 2 + 1e-9 ? 10 : 0) + Math.max(o.dev, 0)
+      + 0.04 * splits + (o.parts.length > 1 ? 0.05 : 0) + o.pieces * 1e-6;
+  }
   return opts;
 }
 const bestOption = opts => opts.reduce((b, o) => o.score < b.score - 1e-12 ? o : b);
