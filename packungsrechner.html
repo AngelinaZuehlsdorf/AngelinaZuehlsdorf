@@ -692,7 +692,8 @@ function applyRec(i) {
 
 // Dosieroptionen für eine Zieldosis in mg: jede Stärke einzeln (mit Teilbarkeit) und, bei Tabletten
 // und Kapseln, je 1 ganzes Stück zweier verschiedener Stärken (wie Cerenia im Kostenvoranschlag).
-// Bewertung: Abweichung von der Zieldosis plus 4 Prozentpunkte je zusätzlichem Stück.
+// Auswahl wie im Kostenvoranschlag: nie unter der Zieldosis, höchstens 2 Stück pro Gabe (nur wenn das
+// nicht reicht, auch mehr), sonst so nah wie möglich an der Zieldosis; bei gleicher Dosis weniger Stück.
 function doseOptions(f, mg) {
   const opts = [];
   f.v.forEach((v, i) => {
@@ -707,10 +708,13 @@ function doseOptions(f, mg) {
       opts.push({ parts: [[i, 1], [j, 1]], mg: a + b, pieces: 2 });
     }
   }
-  for (const o of opts) { o.dev = (o.mg - mg) / mg; o.score = Math.abs(o.dev) + 0.04 * (o.pieces - 1); }
+  for (const o of opts) o.dev = (o.mg - mg) / mg;
+  // Rangfolge: Optionen unter der Zieldosis ganz hinten, dann höchstens 2 Stück vor mehr Stück,
+  // dann geringste Überdosierung, dann weniger Stück
+  for (const o of opts) o.score = (o.dev < -1e-9 ? 100 - o.dev : 0) + (o.pieces > 2 + 1e-9 ? 10 : 0) + Math.max(o.dev, 0) + o.pieces * 1e-6;
   return opts;
 }
-const bestOption = opts => opts.reduce((b, o) => o.score < b.score - 1e-9 || (Math.abs(o.score - b.score) < 1e-9 && o.pieces < b.pieces) ? o : b);
+const bestOption = opts => opts.reduce((b, o) => o.score < b.score - 1e-12 ? o : b);
 const targetMg = () => { const m = $("doseMode").value, a = +$("dose").value, w = +$("weight").value;
   return (m === "s" && a > 0) ? a : (m === "kg" && a > 0 && w > 0) ? a * w : null; };
 
@@ -774,7 +778,8 @@ function perDoseFor(f, v, mode, amount, weight, split) {
   else if (mode === "s") req = amount / v.s;
   else req = amount * weight / v.s;
   const st = stepFor(f, v, split);
-  const pd = Math.max(st, Math.round(req / st - 1e-9) * st);
+  // Dosierung in mg bzw. mg/kg: nie unter der Zieldosis, also auf die nächste teilbare Menge aufrunden
+  const pd = Math.max(st, (mode === "u" ? Math.round(req / st - 1e-9) : Math.ceil(req / st - 1e-9)) * st);
   return { req, pd: +pd.toFixed(4) };
 }
 
@@ -940,7 +945,7 @@ function compareTable(f, mg, sch) {
   const best = bestOption(opts);
   const cur = o => state.mix ? o.parts.length > 1 && o.parts.every(([i], k) => state.mix[k] && state.mix[k][0] === i)
                              : o.parts.length === 1 && o.parts[0][0] === state.vi;
-  const rows = opts.slice().sort((a, b) => a.score - b.score).filter(o => Math.abs(o.dev) <= 0.3 || cur(o)).slice(0, 6);
+  const rows = opts.slice().sort((a, b) => a.score - b.score).filter(o => (o.dev > -1e-9 && o.dev <= 0.3) || cur(o)).slice(0, 6);
   return `<div class="step"><div class="label"><span>Stärken und Kombinationen für ${nf(mg, 3)} ${f.su} pro Gabe</span></div><div class="tablewrap"><table>
     <thead><tr><th>Pro Gabe</th><th>Dosis</th><th>Abweichung</th><th>Empfehlung</th></tr></thead><tbody>
     ${rows.map(o => {
