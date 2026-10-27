@@ -600,7 +600,7 @@ const packNote = p => Array.isArray(p) ? p[1] : "";
 const packName = (u, p) => "OP " + nf(packSize(p)) + " " + uShort(u) + (packNote(p) ? " (" + packNote(p) + ")" : "");
 
 // ---------- Zustand ----------
-const state = { fi: DATA.findIndex(f => f.n === "Apoquel Kautabletten"), vi: 2, split: 2 };
+const state = { fi: DATA.findIndex(f => f.n === "Apoquel Kautabletten"), vi: 2, split: 2, mix: null, manual: false };
 const $ = id => document.getElementById(id);
 
 function renderList() {
@@ -618,7 +618,7 @@ function renderVariants() {
   const f = DATA[state.fi];
   $("variants").innerHTML = f.v.map((v, i) => {
     const packs = v.p.length ? v.p.map(p => nf(packSize(p))).join(" / ") + " " + uShort(f.u) : "Packung unbekannt";
-    return `<button type="button" class="chip" data-i="${i}" aria-pressed="${i === state.vi}"><b>${vLabel(f, v)}</b><small>${packs}</small></button>`;
+    return `<button type="button" class="chip" data-i="${i}" aria-pressed="${state.mix ? state.mix.some(([j]) => j === i) : i === state.vi}"><b>${vLabel(f, v)}</b><small>${packs}</small></button>`;
   }).join("");
 }
 
@@ -679,7 +679,7 @@ function renderRecs() {
 function applyRec(i) {
   const f = DATA[state.fi], a = (DOSES[f.n] || [])[i][2];
   if (!a) return;
-  state.rec = i;
+  state.rec = i; state.manual = false;
   state.band = a.m === "band" ? a.b : null;
   if (a.sp) state.split = a.sp;
   renderDoseModes(true);
@@ -690,24 +690,50 @@ function applyRec(i) {
   syncSplit(); syncMode(); syncFreq(); renderRecs(); pickVariant(); compute();
 }
 
-// Bei Dosierung in mg bzw. mg/kg die passendste Stärke wählen: Abweichung höchstens 10 %, dann möglichst wenige Stück pro Gabe
-function pickVariant() {
-  const f = DATA[state.fi], mode = $("doseMode").value, amount = +$("dose").value, weight = +$("weight").value;
-  if ((mode !== "s" && mode !== "kg") || !(amount > 0) || (mode === "kg" && !(weight > 0))) return;
-  const mg = mode === "s" ? amount : amount * weight;
-  const cands = f.v.map((v, i) => {
-    if (v.s == null) return null;
+// Dosieroptionen für eine Zieldosis in mg: jede Stärke einzeln (mit Teilbarkeit) und, bei Tabletten
+// und Kapseln, je 1 ganzes Stück zweier verschiedener Stärken (wie Cerenia im Kostenvoranschlag).
+// Bewertung: Abweichung von der Zieldosis plus 4 Prozentpunkte je zusätzlichem Stück.
+function doseOptions(f, mg) {
+  const opts = [];
+  f.v.forEach((v, i) => {
+    if (v.s == null) return;
     const r = perDoseFor(f, v, "s", mg, 0, state.split);
-    return { i, pd: r.pd, dev: Math.abs(r.pd - r.req) / r.req };
-  }).filter(Boolean);
-  if (cands.length < 2) return;
-  const ok = cands.filter(c => c.dev <= 0.1);
-  const best = ok.length ? ok.sort((a, b) => a.pd - b.pd || a.dev - b.dev)[0] : cands.sort((a, b) => a.dev - b.dev)[0];
-  if (best.i !== state.vi) { state.vi = best.i; renderVariants(); }
+    opts.push({ parts: [[i, r.pd]], mg: r.pd * v.s, pieces: r.pd });
+  });
+  if (f.u === "Tbl" || f.u === "Kap") {
+    for (let i = 0; i < f.v.length; i++) for (let j = i + 1; j < f.v.length; j++) {
+      const a = f.v[i].s, b = f.v[j].s;
+      if (a == null || b == null || a === b) continue;
+      opts.push({ parts: [[i, 1], [j, 1]], mg: a + b, pieces: 2 });
+    }
+  }
+  for (const o of opts) { o.dev = (o.mg - mg) / mg; o.score = Math.abs(o.dev) + 0.04 * (o.pieces - 1); }
+  return opts;
+}
+const bestOption = opts => opts.reduce((b, o) => o.score < b.score - 1e-9 || (Math.abs(o.score - b.score) < 1e-9 && o.pieces < b.pieces) ? o : b);
+const targetMg = () => { const m = $("doseMode").value, a = +$("dose").value, w = +$("weight").value;
+  return (m === "s" && a > 0) ? a : (m === "kg" && a > 0 && w > 0) ? a * w : null; };
+
+function setOption(o) {
+  if (o.parts.length > 1) { state.mix = o.parts; state.vi = o.parts[0][0]; }
+  else { state.mix = null; state.vi = o.parts[0][0]; }
+  renderVariants();
+}
+
+// Bei Dosierung in mg bzw. mg/kg die passendste Stärke oder Stärkenkombination wählen
+function pickVariant() {
+  const f = DATA[state.fi], mg = targetMg();
+  state.mix = null;
+  if (mg == null) { renderVariants(); return; }
+  const opts = doseOptions(f, mg);
+  if (opts.length < 2) { renderVariants(); return; }
+  setOption(bestOption(opts));
 }
 
 // manuelle Änderung: Markierung der übernommenen Empfehlung aufheben
 function touched() { if (state.rec != null) { state.rec = null; renderRecs(); } }
+// Dosis oder Gewicht geändert: passende Stärke neu wählen, solange keine Stärke von Hand gewählt wurde
+function autoPick() { if (!state.manual) pickVariant(); }
 
 function syncSplit() {
   document.querySelectorAll("#split button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === state.split));
@@ -722,7 +748,7 @@ function selectFamily(i) {
   if (f.wb) $("freq").value = "d1";
   if (f.iv) { $("freq").value = "i" + f.iv; $("dur").value = 3; $("durUnit").value = "30"; }
   else if (prevIv) { $("freq").value = "d1"; $("dur").value = 14; $("durUnit").value = "1"; }
-  state.band = null; state.rec = null;
+  state.band = null; state.rec = null; state.mix = null; state.manual = false;
   renderList(); renderVariants(); renderDoseModes(false); syncFreq(); renderRecs();
   // erste übernehmbare Empfehlung direkt anwenden
   const first = (DOSES[f.n] || []).findIndex(r => r[2]);
@@ -822,6 +848,9 @@ function compute() {
     if (r.err) { out.innerHTML = `<div class="note">${r.err}</div>`; return; }
     if (r.vi != null && r.vi !== state.vi) { state.vi = r.vi; v = f.v[r.vi]; renderVariants(); }
     pd = req = r.pd; how = `${amountTxt(f.u, pd)} nach Gewichtstabelle`;
+  } else if (state.mix && (mode === "s" || mode === "kg")) {
+    out.innerHTML = renderMix(f, mode === "s" ? amount : amount * weight);
+    return;
   } else ({ req, pd } = perDoseFor(f, v, mode, amount, weight, state.split));
   const sch = schedule();
   const loading = syr && $("loading").checked;
@@ -893,20 +922,57 @@ function compute() {
       }).join("")}</tbody></table></div></div>`;
   }
 
-  // Vergleich über alle Stärken desselben Präparats bei Dosierung in mg / mg/kg
-  const alts = f.v.map((w, i) => [w, i]).filter(([w]) => w.s != null);
-  if ((mode === "s" || mode === "kg") && alts.length > 1) {
-    const mg = mode === "s" ? amount : amount * weight;
-    h += `<div class="step"><div class="label"><span>Vergleich der Stärken für ${nf(mg, 3)} ${f.su} pro Gabe</span></div><div class="tablewrap"><table>
-      <thead><tr><th>Stärke</th><th>Pro Gabe</th><th>Abweichung</th><th>Bedarf</th><th>Empfehlung</th></tr></thead><tbody>
-      ${alts.map(([w, i]) => {
-        const r = perDoseFor(f, w, "s", mg, 0, state.split);
-        const nd = totalNeed(f, r.pd, sch.doses), c = bestCombo(nd, w.p), d = (r.pd - r.req) / r.req;
-        return `<tr class="click${i === state.vi ? " cur" : ""}" data-vi="${i}" title="Diese Stärke wählen"><td>${vLabel(f, w)}</td><td class="num">${amountTxt(f.u, r.pd)}</td><td class="num">${Math.abs(d) < 0.005 ? "exakt" : (d > 0 ? "+" : "") + nf(d * 100, 0) + " %"}</td><td class="num">${nf(nd)}</td><td>${c ? comboTxt(f, w.p, c) : "–"}</td></tr>`;
-      }).join("")}</tbody></table></div><div class="hint">Zeile antippen, um die Stärke zu übernehmen.</div></div>`;
-  }
+  if (mode === "s" || mode === "kg") h += compareTable(f, mode === "s" ? amount : amount * weight, sch);
 
   out.innerHTML = h;
+}
+
+// Bezeichnung einer Dosieroption, z. B. "1 Tbl. 16 mg + 1 Tbl. 24 mg"
+function optLabel(f, o) {
+  return o.parts.map(([i, n]) => `${f.u === "Tbl" ? fracTxt(n) : nf(n)} ${uShort(f.u)} ${vLabel(f, f.v[i])}`).join(" + ");
+}
+const devTxt = d => Math.abs(d) < 0.005 ? "exakt" : (d > 0 ? "+" : "") + nf(d * 100, 0) + " %";
+
+// Vergleich aller Stärken und Zweierkombinationen für die Zieldosis
+function compareTable(f, mg, sch) {
+  const opts = doseOptions(f, mg);
+  if (opts.length < 2) return "";
+  const best = bestOption(opts);
+  const cur = o => state.mix ? o.parts.length > 1 && o.parts.every(([i], k) => state.mix[k] && state.mix[k][0] === i)
+                             : o.parts.length === 1 && o.parts[0][0] === state.vi;
+  const rows = opts.slice().sort((a, b) => a.score - b.score).filter(o => Math.abs(o.dev) <= 0.3 || cur(o)).slice(0, 6);
+  return `<div class="step"><div class="label"><span>Stärken und Kombinationen für ${nf(mg, 3)} ${f.su} pro Gabe</span></div><div class="tablewrap"><table>
+    <thead><tr><th>Pro Gabe</th><th>Dosis</th><th>Abweichung</th><th>Empfehlung</th></tr></thead><tbody>
+    ${rows.map(o => {
+      const packs = o.parts.map(([i, n]) => { const w = f.v[i], c = bestCombo(totalNeed(f, n, sch.doses), w.p); return c ? comboTxt(f, w.p, c) + (o.parts.length > 1 ? " " + vLabel(f, w) : "") : "–"; }).join(" + ");
+      return `<tr class="click${cur(o) ? " cur" : ""}" data-o="${opts.indexOf(o)}" title="Diese Option wählen"><td>${optLabel(f, o)}${o === best ? " ★" : ""}</td><td class="num">${nf(o.mg, 3)} ${f.su}</td><td class="num">${devTxt(o.dev)}</td><td>${packs}</td></tr>`;
+    }).join("")}</tbody></table></div><div class="hint">★ beste Passung · Zeile antippen, um sie zu übernehmen.</div></div>`;
+}
+
+// Ergebnis bei Kombination zweier Stärken pro Gabe
+function renderMix(f, mg) {
+  const sch = schedule(), parts = state.mix;
+  const o = { parts, mg: parts.reduce((a, [i, n]) => a + n * f.v[i].s, 0) };
+  const dev = (o.mg - mg) / mg;
+  const items = parts.map(([i, n]) => {
+    const w = f.v[i], need = totalNeed(f, n, sch.doses), c = bestCombo(need, w.p);
+    return { w, n, need, c };
+  });
+  const packTxt = items.map(x => x.c ? `${comboTxt(f, x.w.p, x.c)} ${vLabel(f, x.w)}` : `${vLabel(f, x.w)}: Packung unbekannt`).join(" + ");
+  const doseTxt = `${optLabel(f, o)} (${nf(o.mg, 3)} ${f.su})`;
+  let h = `<div class="need">
+      <div class="label"><span>Gesamtbedarf</span></div>
+      <div class="big">${items.map(x => `${nf(x.need)} ${uShort(f.u)} ${vLabel(f, x.w)}`).join(" + ")}</div>
+      <div class="calc">${doseTxt} pro Gabe · ${sch.txt}</div>
+    </div>
+    <div class="rec">
+      <div class="eyebrow">Abgeben</div>
+      <div class="packs">${packTxt}</div>
+      <div class="sub">${f.n} · ${items.map(x => x.c ? `Überschuss ${amountTxt(f.u, x.c.over)} à ${vLabel(f, x.w)}` : "").filter(Boolean).join(" · ")}</div>
+    </div>
+    <div class="sig"><code id="sigText">${packTxt} ${f.n}\nS. ${doseTxt} ${sch.sig}</code><button type="button" class="btn" id="copy">Kopieren</button></div>`;
+  if (Math.abs(dev) > 0.005) h += `<div class="note">Zieldosis ${nf(mg, 3)} ${f.su}, mit der Kombination ${nf(o.mg, 3)} ${f.su} (${devTxt(dev)}).</div>`;
+  return h + compareTable(f, mg, sch);
 }
 
 // ---------- Ereignisse ----------
@@ -914,23 +980,28 @@ $("search").addEventListener("input", renderList);
 $("list").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) selectFamily(+b.dataset.i); });
 $("variants").addEventListener("click", e => {
   const b = e.target.closest(".chip"); if (!b) return;
-  state.vi = +b.dataset.i; touched();
+  state.vi = +b.dataset.i; state.mix = null; state.manual = true; touched();
   // manuell gewählte Stärke: Gewichtstabelle würde sie überschreiben, daher auf Stückzahl umstellen
   if ($("doseMode").value === "band") { touched(); renderDoseModes(true); $("doseMode").value = "u"; $("dose").value = 1; syncMode(); }
   renderVariants(); renderDoseModes(true); compute();
 });
 $("recs").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (b) applyRec(+b.dataset.r); });
-$("split").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; state.split = +b.dataset.v; syncSplit(); touched(); compute(); });
-$("doseMode").addEventListener("change", () => { syncMode(); touched(); compute(); });
+$("split").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; state.split = +b.dataset.v; syncSplit(); touched(); autoPick(); compute(); });
+$("doseMode").addEventListener("change", () => { syncMode(); touched(); autoPick(); compute(); });
 ["syrStep", "loading"].forEach(id => $(id).addEventListener("change", compute));
 $("freq").addEventListener("change", () => { syncFreq(); touched(); compute(); });
-["dose", "customDays", "dur"].forEach(id => $(id).addEventListener("input", () => { touched(); compute(); }));
+$("dose").addEventListener("input", () => { touched(); autoPick(); compute(); });
+["customDays", "dur"].forEach(id => $(id).addEventListener("input", () => { touched(); compute(); }));
 // solange die Empfehlung unverändert gilt, passt sich die Stärke dem Gewicht an
-$("weight").addEventListener("input", () => { if (state.rec != null) pickVariant(); compute(); });
+$("weight").addEventListener("input", () => { autoPick(); compute(); });
 $("durUnit").addEventListener("change", () => { touched(); compute(); });
 $("result").addEventListener("click", e => {
-  const tr = e.target.closest("tr[data-vi]");
-  if (tr) { state.vi = +tr.dataset.vi; renderVariants(); renderDoseModes(true); compute(); return; }
+  const tr = e.target.closest("tr[data-o]");
+  if (tr) {
+    const mg = targetMg(); if (mg == null) return;
+    setOption(doseOptions(DATA[state.fi], mg)[+tr.dataset.o]); state.manual = true; touched();
+    renderDoseModes(true); compute(); return;
+  }
   if (e.target.id === "copy") {
     const txt = $("sigText").textContent, btn = e.target;
     navigator.clipboard.writeText(txt).then(() => { btn.textContent = "Kopiert"; setTimeout(() => btn.textContent = "Kopieren", 1500); })
