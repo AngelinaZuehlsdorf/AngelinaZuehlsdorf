@@ -43,83 +43,89 @@ html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!i
 }
 * { box-sizing: border-box; }
 body {
-  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.4;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 24px 48px;
+  padding-block: 12px 32px;
 }
-.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
-header h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.7rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
-header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
-.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 12px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+header h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 14px; align-items: start; }
 @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 18px; min-width: 0; }
-.step { display: grid; gap: 8px; min-width: 0; }
-.label { font-family: var(--font-display); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.step { display: grid; gap: 5px; min-width: 0; }
+.label { font-family: var(--font-display); font-weight: 600; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
 input, select, button { font: inherit; color: inherit; }
 input[type="text"], input[type="number"], select {
-  background: var(--sunk); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; width: 100%; min-width: 0;
+  background: var(--sunk); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; width: 100%; min-width: 0;
 }
 input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.list { border: 1px solid var(--line); border-radius: 7px; max-height: 270px; overflow-y: auto; background: var(--sunk); }
+.list { border: 1px solid var(--line); border-radius: 7px; max-height: 136px; overflow-y: auto; background: var(--sunk); }
 .list button {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; width: 100%; text-align: left; background: none; border: 0;
-  border-bottom: 1px solid var(--line); padding: 8px 11px; cursor: pointer;
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: none; border: 0;
+  border-bottom: 1px solid var(--line); padding: 4px 10px; cursor: pointer;
 }
 .list button:last-child { border-bottom: 0; }
 .list button:hover { background: var(--accent-soft); }
 .list button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
-.list .n { font-weight: 700; min-width: 0; }
-.list .w { grid-column: 1; font-size: 0.85rem; opacity: 0.75; min-width: 0; }
-.list .c { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-family: var(--font-mono); font-size: 0.75rem; opacity: 0.7; }
+.list .n { font-weight: 700; white-space: nowrap; }
+.list .w { flex: 1; font-size: 0.82rem; opacity: 0.75; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list .c { flex: 0 0 auto; font-family: var(--font-mono); font-size: 0.75rem; opacity: 0.7; }
 .empty { padding: 14px; color: var(--muted); }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  border: 1px solid var(--line); background: var(--sunk); border-radius: 7px; padding: 7px 11px; cursor: pointer; text-align: left;
-  display: grid; gap: 1px;
+  border: 1px solid var(--line); background: var(--sunk); border-radius: 7px; padding: 4px 9px; cursor: pointer; text-align: left;
+  display: flex; align-items: baseline; gap: 6px;
 }
 .chip b { font-weight: 700; }
 .chip small { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .chip[aria-pressed="true"] small { color: inherit; opacity: 0.8; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.row > * { flex: 1 1 120px; }
-.row .narrow { flex: 0 1 110px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.row > * { flex: 1 1 90px; }
+.kgwrap { display: flex; align-items: center; gap: 6px; flex: 1 1 110px; }
+.kgwrap input { flex: 1; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+@media (max-width: 340px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .label .opt { display: none; } }
+.row .narrow { flex: 0 1 80px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; flex: 0 0 auto; }
-.seg button { border: 0; background: var(--sunk); padding: 8px 12px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button { border: 0; background: var(--sunk); padding: 5px 11px; cursor: pointer; border-right: 1px solid var(--line); }
 .seg button:last-child { border-right: 0; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .hint { font-size: 0.85rem; color: var(--muted); }
-.recs { display: grid; gap: 6px; }
-.recbtn { text-align: left; border: 1px solid var(--line); background: var(--sunk); border-radius: 7px; padding: 8px 11px; display: grid; gap: 2px; min-width: 0; }
+.recs { display: grid; gap: 4px; }
+.recbtn { text-align: left; border: 1px solid var(--line); background: var(--sunk); border-radius: 7px; padding: 5px 9px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; font-size: 0.88rem; }
 button.recbtn { cursor: pointer; }
 button.recbtn:hover { border-color: var(--accent); }
 .recbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .recbtn .sp { font-family: var(--font-display); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
-.recbtn small { font-size: 0.75rem; color: var(--muted); }
-.check { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; }
-.check input { margin-top: 4px; accent-color: var(--accent); }
+.recbtn small { font-size: 0.7rem; color: var(--muted); margin-left: auto; }
+.check { display: flex; gap: 6px; align-items: flex-start; font-size: 0.85rem; }
+.check input { margin-top: 2px; accent-color: var(--accent); }
 
 /* Ergebnis */
 .result { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
 @media (max-width: 860px) { .result { position: static; } }
 .need { display: grid; gap: 2px; }
-.need .big { font-family: var(--font-display); font-weight: 700; font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.need .big { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .need .calc { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
-.rec { background: var(--accent); color: var(--accent-ink); border-radius: 9px; padding: 16px; display: grid; gap: 6px; }
+.rec { background: var(--accent); color: var(--accent-ink); border-radius: 9px; padding: 11px 14px; display: grid; gap: 3px; }
 .rec .eyebrow { font-family: var(--font-display); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; }
-.rec .packs { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; line-height: 1.25; }
-.rec .sub { font-size: 0.9rem; opacity: 0.9; }
-.alt { border: 1px dashed var(--line); border-radius: 9px; padding: 12px 14px; font-size: 0.92rem; }
+.rec .packs { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1.25; }
+.rec .sub { font-size: 0.85rem; opacity: 0.9; }
+.alt { border: 1px dashed var(--line); border-radius: 9px; padding: 7px 12px; font-size: 0.86rem; }
 .alt b { font-weight: 700; }
-.note { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; }
-.note + .note { margin-top: -10px; }
-.sig { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
-.sig code { font-family: var(--font-mono); font-size: 0.82rem; flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.note { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 6px 10px; font-size: 0.84rem; }
+.note + .note { margin-top: -6px; }
+.sig { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; display: flex; gap: 10px; align-items: flex-start; }
+.sig code { font-family: var(--font-mono); font-size: 0.78rem; flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; flex: 0 0 auto; }
 .btn:hover { border-color: var(--accent); }
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
-table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
-th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+th, td { padding: 4px 9px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { font-family: var(--font-display); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--sunk); }
 td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 tr:last-child td { border-bottom: 0; }
@@ -135,7 +141,7 @@ footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
 <div class="wrap">
   <header>
     <h1>Packungsrechner</h1>
-    <p>Präparat wählen, Dosierung und Dauer eingeben – der Rechner ermittelt den Gesamtbedarf und die passende Packungskombination aus dem Praxissortiment.</p>
+    <p>Präparat wählen, Dosierung und Dauer eingeben, passende Packung ablesen.</p>
   </header>
 
   <div class="grid">
@@ -152,7 +158,7 @@ footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
       </div>
 
       <div class="step">
-        <div class="label"><span>Empfohlene Dosierung</span><span>antippen zum Übernehmen</span></div>
+        <div class="label"><span>Empfohlene Dosierung</span><span class="opt">antippen zum Übernehmen</span></div>
         <div class="recs" id="recs"></div>
       </div>
 
@@ -161,11 +167,7 @@ footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
         <div class="row">
           <input type="number" id="dose" min="0" step="any" inputmode="decimal" aria-label="Dosis">
           <select id="doseMode" aria-label="Einheit der Dosis"></select>
-        </div>
-        <div class="row" id="weightRow" hidden>
-          <label class="hint narrow" for="weight">Körpergewicht</label>
-          <input type="number" id="weight" min="0" step="any" inputmode="decimal" placeholder="kg">
-          <span class="hint narrow">kg</span>
+          <span class="kgwrap" id="weightRow" hidden><input type="number" id="weight" min="0" step="any" inputmode="decimal" placeholder="Gewicht" aria-label="Körpergewicht in kg"><span class="hint">kg KGW</span></span>
         </div>
         <div class="row" id="splitRow" hidden>
           <span class="hint narrow">Tabletten</span>
@@ -183,9 +185,10 @@ footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
             <option value="0">exakt nach Gewicht</option>
           </select>
         </div>
-        <label class="check" id="loadRow" hidden><input type="checkbox" id="loading"> <span>Am 1. Tag doppelte Dosis oral (Initialdosis). Nicht ankreuzen, wenn sie per Injektion in der Praxis gegeben wurde.</span></label>
+        <label class="check" id="loadRow" hidden><input type="checkbox" id="loading"> <span title="Nicht ankreuzen, wenn die Initialdosis per Injektion in der Praxis gegeben wurde.">Am 1. Tag doppelte Dosis oral (Initialdosis)</span></label>
       </div>
 
+      <div class="cols">
       <div class="step">
         <div class="label"><span>Häufigkeit</span></div>
         <div class="row">
@@ -214,9 +217,10 @@ footer { color: var(--muted); font-size: 0.82rem; max-width: 80ch; }
           <select id="durUnit" aria-label="Einheit der Dauer">
             <option value="1">Tage</option>
             <option value="7">Wochen</option>
-            <option value="30">Monate (à 30 Tage)</option>
+            <option value="30">Monate (30 T.)</option>
           </select>
         </div>
+      </div>
       </div>
     </section>
 
@@ -667,7 +671,7 @@ function bandDose(w) {
 function renderRecs() {
   const recs = DOSES[DATA[state.fi].n] || [];
   $("recs").innerHTML = recs.length ? recs.map(([t, x, a, src], i) => {
-    const inner = `${t ? `<span class="sp">${t}</span>` : ""}<span>${x}</span><small>${src === "FI" ? "Fachinformation" : "Literaturwert / Umwidmung"}</small>`;
+    const inner = `${t ? `<span class="sp">${t}</span>` : ""}<span>${x}</span><small>${src === "FI" ? "Fachinfo" : "Literatur / Umwidmung"}</small>`;
     return a ? `<button type="button" class="recbtn" data-r="${i}" aria-pressed="${i === state.rec}">${inner}</button>` : `<div class="recbtn">${inner}</div>`;
   }).join("") : `<div class="hint">Keine Empfehlung hinterlegt.</div>`;
 }
